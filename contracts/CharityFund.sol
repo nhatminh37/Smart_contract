@@ -10,6 +10,10 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
  * @dev A decentralized platform for transparent charity and disaster relief fund management
  */
 contract CharityFund is Ownable, ReentrancyGuard {
+    constructor() Ownable(msg.sender) {
+        // Any additional initialization if needed
+    }
+    
     using Counters for Counters.Counter;
     
     struct Campaign {
