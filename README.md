@@ -2,6 +2,14 @@
 
 A blockchain-based platform for transparent charity and disaster relief fundraising, allowing donors to track and vote on how funds are distributed.
 
+## Ethereum Testnet Used
+This project is deployed on the **Sepolia Testnet**. The smart contract address is: `0x89668b2f0934aC4607A7DF32A23be8E4959B9d8e`
+## Website 
+The website is available at : https://nhatminh37.github.io/Smart_contract/
+## Interface
+The frontend is deployed and available for live demonstration at:
+https://nhatminh37.github.io/Smart_contract/frontend
+
 ## Features
 
 - **Transparent Fundraising**: All donations are recorded on the blockchain
@@ -14,77 +22,16 @@ A blockchain-based platform for transparent charity and disaster relief fundrais
 
 - `contracts/` - Smart contract code
   - `CharityFund.sol` - Main contract for the charity platform
-- `frontend/` - React-based web interface
-  - `src/components/` - React components
-  - `src/services/` - Services for blockchain interaction
-  - `src/assets/` - CSS and images
-
-## Technologies Used
-
-- **Smart Contract**: Solidity
-- **Blockchain**: Ethereum
-- **Frontend**: React.js
-- **Web3 Integration**: ethers.js
-- **Development Tools**: Hardhat
-
-## Setup and Deployment
-
+- `frontend/` - Web interface
+  - `index.html` - Main HTML file
+  - `styles.css` - CSS styling
+  - `app.js` - JavaScript for frontend functionality
+  - `contract-abi.js` - Contract ABI and address
 ### Prerequisites
 
-- Node.js and npm installed
 - MetaMask browser extension
-- Ethereum testnet (Sepolia/Goerli) account with test ETH
+- Sepolia testnet account with test ETH
 
-### Smart Contract Deployment
-
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Configure your `.env` file with your private key and Infura/Alchemy API key:
-   ```
-   PRIVATE_KEY=your_private_key
-   INFURA_API_KEY=your_infura_api_key
-   ```
-
-3. Deploy to a testnet (e.g., Sepolia):
-   ```bash
-   npx hardhat run scripts/deploy.js --network sepolia
-   ```
-
-4. Copy the deployed contract address and update it in `frontend/src/services/web3Service.js`.
-
-### Frontend Development
-
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-   ```bash
-   npm start
-   ```
-
-4. The application will be available at `http://localhost:3000`.
-
-### Hosting on GitHub Pages
-
-1. Update the `homepage` field in `package.json`:
-   ```json
-   "homepage": "https://yourusername.github.io/transparency-trust"
-   ```
-
-2. Deploy to GitHub Pages:
-   ```bash
-   npm run deploy
-   ```
 
 ## Using the DApp
 
@@ -98,14 +45,9 @@ A blockchain-based platform for transparent charity and disaster relief fundrais
 ## Testnet Faucets
 
 Get test ETH for trying the application:
-- [Sepolia Faucet](https://sepoliafaucet.com/)
-- [Goerli Faucet](https://goerlifaucet.com/)
+- [Sepolia Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
+- [Sepolia Faucet (Alchemy)](https://www.alchemy.com/faucets/ethereum-sepolia)
 
 ## License
 
 This project is licensed under the MIT License.
-
-## Acknowledgements
-
-- OpenZeppelin for secure contract libraries
-- Ethereum community for documentation and examples 
