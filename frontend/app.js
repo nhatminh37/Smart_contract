@@ -16,20 +16,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Connect to MetaMask
     async function connectWallet() {
+        if (!window.ethereum) {
+            alert("Please install MetaMask to use this application");
+            walletAddressEl.textContent = "MetaMask not detected";
+            return;
+        }
         try {
-            // Check if MetaMask is installed
-            if (!window.ethereum) {
-                alert("Please install MetaMask to use this application");
-                return;
-            }
-
-            // Request account access
             await window.ethereum.request({ method: 'eth_requestAccounts' });
             provider = new ethers.providers.Web3Provider(window.ethereum);
             signer = provider.getSigner();
             const address = await signer.getAddress();
-            
-            // Display wallet address
             walletAddressEl.textContent = `${address.substring(0, 6)}...${address.substring(38)}`;
             connectWalletBtn.textContent = "Connected";
             
@@ -39,8 +35,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Load campaigns
             loadCampaigns();
         } catch (error) {
-            console.error("Error connecting to wallet:", error);
-            walletAddressEl.textContent = "Connection failed";
+            if (error.code === 4001) {
+                walletAddressEl.textContent = "Connection request denied";
+            } else {
+                walletAddressEl.textContent = "Connection failed";
+            }
         }
     }
 
