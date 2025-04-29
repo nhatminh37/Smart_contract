@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Load campaigns
             loadCampaigns();
         } catch (error) {
+            console.error("MetaMask connection error:", error);
             if (error.code === 4001) {
                 walletAddressEl.textContent = "Connection request denied";
             } else {
