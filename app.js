@@ -10,9 +10,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const donateBtn = document.getElementById('donateBtn');
     const donationStatusEl = document.getElementById('donationStatus');
 
+    // Add admin section to the HTML
+    const mainEl = document.querySelector('main');
+    const adminSection = document.createElement('section');
+    adminSection.className = 'admin-section';
+    adminSection.innerHTML = `
+        <h2>Admin Functions</h2>
+        <div id="adminPanel" style="display: none;">
+            <h3>Create Campaign</h3>
+            <form id="createCampaignForm">
+                <div>
+                    <label for="campaignName">Name:</label>
+                    <input type="text" id="campaignName" placeholder="Campaign Name" required>
+                </div>
+                <div>
+                    <label for="campaignDescription">Description:</label>
+                    <textarea id="campaignDescription" placeholder="Campaign Description" required></textarea>
+                </div>
+                <div>
+                    <label for="campaignImageURI">Image URL:</label>
+                    <input type="text" id="campaignImageURI" placeholder="Image URL" value="https://placehold.co/400x200?text=Campaign+Image" required>
+                </div>
+                <div>
+                    <label for="campaignTarget">Target Amount (ETH):</label>
+                    <input type="number" id="campaignTarget" placeholder="Target Amount" step="0.01" min="0.01" required>
+                </div>
+                <div>
+                    <label for="campaignBeneficiary">Beneficiary Address:</label>
+                    <input type="text" id="campaignBeneficiary" placeholder="Beneficiary Address" required>
+                </div>
+                <button type="submit" id="createCampaignBtn">Create Campaign</button>
+            </form>
+            <p id="createCampaignStatus"></p>
+        </div>
+    `;
+    mainEl.appendChild(adminSection);
+
     // Global variables
     let provider, signer, contract;
     let selectedCampaignId = null;
+    let currentAccount = null;
+    const CONTRACT_OWNER = '0x00ED48da0A7a1a6E369A2825e5C6A98584C0f44d'.toLowerCase();
     
     // Simple connection function with minimal dependencies
     async function connectWallet() {
@@ -32,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Requesting accounts...");
             const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
             const account = accounts[0];
+            currentAccount = account.toLowerCase();
             
             console.log("Connected account:", account);
             walletAddressEl.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
@@ -53,6 +92,15 @@ document.addEventListener('DOMContentLoaded', () => {
             signer = provider.getSigner();
             contract = new ethers.Contract(contractAddress, contractABI, signer);
             
+            // Check if user is contract owner
+            if (currentAccount === CONTRACT_OWNER) {
+                console.log("User is contract owner, displaying admin panel");
+                document.getElementById('adminPanel').style.display = 'block';
+            } else {
+                console.log("User is not contract owner");
+                document.getElementById('adminPanel').style.display = 'none';
+            }
+            
             // Load campaigns
             loadCampaigns();
             
@@ -64,6 +112,52 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 walletAddressEl.textContent = "Connection failed";
             }
+        }
+    }
+
+    // Create a campaign (admin function)
+    async function createCampaign(event) {
+        event.preventDefault();
+        
+        if (currentAccount !== CONTRACT_OWNER) {
+            alert("Only the contract owner can create campaigns");
+            return;
+        }
+        
+        const name = document.getElementById('campaignName').value;
+        const description = document.getElementById('campaignDescription').value;
+        const imageURI = document.getElementById('campaignImageURI').value;
+        const targetAmount = ethers.utils.parseEther(document.getElementById('campaignTarget').value);
+        const beneficiary = document.getElementById('campaignBeneficiary').value;
+        
+        const statusEl = document.getElementById('createCampaignStatus');
+        statusEl.textContent = "Creating campaign...";
+        
+        try {
+            console.log("Creating campaign with params:", { name, description, imageURI, targetAmount: targetAmount.toString(), beneficiary });
+            
+            const tx = await contract.createCampaign(
+                name,
+                description,
+                imageURI,
+                targetAmount,
+                beneficiary
+            );
+            
+            statusEl.textContent = "Transaction submitted! Waiting for confirmation...";
+            await tx.wait();
+            
+            statusEl.textContent = "Campaign created successfully!";
+            
+            // Reset form
+            document.getElementById('createCampaignForm').reset();
+            
+            // Reload campaigns
+            loadCampaigns();
+            
+        } catch (error) {
+            console.error("Error creating campaign:", error);
+            statusEl.textContent = "Error: " + (error.message || "Failed to create campaign");
         }
     }
 
@@ -184,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Event listeners
     connectWalletBtn.addEventListener('click', connectWallet);
     donateBtn.addEventListener('click', donate);
+    document.getElementById('createCampaignForm').addEventListener('submit', createCampaign);
 
     // Listen for account changes
     if (window.ethereum) {

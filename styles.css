@@ -119,17 +119,26 @@ input {
 }
 
 .campaign-card {
-    border: 1px solid #eee;
+    border: 1px solid #ddd;
     border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 1rem;
+    padding: 15px;
+    margin-bottom: 20px;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     cursor: pointer;
     transition: transform 0.2s;
 }
 
 .campaign-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+.campaign-image img {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 10px 0;
 }
 
 .progress-bar {
@@ -172,4 +181,58 @@ footer a:hover {
 #walletAddress {
     font-family: monospace;
     font-size: 0.9rem;
+}
+
+.admin-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.admin-section h2 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+}
+
+.admin-section form div {
+    margin-bottom: 15px;
+}
+
+.admin-section label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.admin-section input, 
+.admin-section textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.admin-section textarea {
+    height: 100px;
+    resize: vertical;
+}
+
+.admin-section button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.admin-section button:hover {
+    background-color: #2980b9;
+}
+
+#createCampaignStatus {
+    margin-top: 10px;
+    font-weight: bold;
 }
