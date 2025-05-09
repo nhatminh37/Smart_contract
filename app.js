@@ -13,98 +13,68 @@ document.addEventListener('DOMContentLoaded', () => {
     // Global variables
     let provider, signer, contract;
     let selectedCampaignId = null;
-    let isConnecting = false;
-
-    // Check if wallet is already connected
-    async function checkWalletConnection() {
-        if (window.ethereum) {
-            try {
-                // Check if we're already connected
-                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                if (accounts.length > 0) {
-                    initializeWeb3(accounts[0]);
-                }
-            } catch (error) {
-                console.error("Error checking initial wallet connection:", error);
-            }
-        } else {
-            console.log("MetaMask not detected");
-            walletAddressEl.textContent = "MetaMask not detected";
+    
+    // Simple connection function with minimal dependencies
+    async function connectWallet() {
+        console.log("Connect button clicked");
+        
+        // Check if MetaMask is installed
+        if (typeof window.ethereum === 'undefined') {
+            console.error("MetaMask is not installed");
+            walletAddressEl.textContent = "MetaMask not installed";
+            return;
         }
-    }
-
-    // Initialize Web3 and contract
-    async function initializeWeb3(account) {
+        
+        walletAddressEl.textContent = "Connecting...";
+        
         try {
-            console.log("Initializing Web3 with account:", account);
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
+            // Request account access
+            console.log("Requesting accounts...");
+            const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+            const account = accounts[0];
+            
+            console.log("Connected account:", account);
             walletAddressEl.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
             connectWalletBtn.textContent = "Connected";
             
-            // Check correct network (Sepolia)
+            // Get network info
+            provider = new ethers.providers.Web3Provider(window.ethereum);
             const network = await provider.getNetwork();
-            console.log("Connected to network:", network.name, "Chain ID:", network.chainId);
-            if (network.chainId !== 11155111) { // Sepolia chain ID
-                walletAddressEl.textContent = "Please connect to Sepolia Testnet";
-                console.log("Wrong network. Please connect to Sepolia Testnet");
+            console.log("Network:", network);
+            
+            // Check if on Sepolia testnet
+            if (network.chainId !== 11155111) {
+                console.error("Not connected to Sepolia testnet");
+                walletAddressEl.textContent = "Please switch to Sepolia testnet";
                 return;
             }
             
             // Initialize contract
+            signer = provider.getSigner();
             contract = new ethers.Contract(contractAddress, contractABI, signer);
-            console.log("Contract initialized at address:", contractAddress);
             
             // Load campaigns
             loadCampaigns();
-        } catch (error) {
-            console.error("Error initializing Web3:", error);
-        }
-    }
-
-    // Connect to MetaMask
-    async function connectWallet() {
-        if (isConnecting) return; // Prevent multiple simultaneous connection attempts
-        
-        if (!window.ethereum) {
-            alert("Please install MetaMask to use this application");
-            walletAddressEl.textContent = "MetaMask not detected";
-            console.error("MetaMask not detected");
-            return;
-        }
-        
-        isConnecting = true;
-        console.log("Attempting to connect to MetaMask...");
-        try {
-            // Request accounts from MetaMask
-            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-            console.log("Accounts returned:", accounts);
             
-            // Initialize web3 with the first account if accounts were returned
-            if (accounts && accounts.length > 0) {
-                initializeWeb3(accounts[0]);
-            } else {
-                console.error("No accounts returned from MetaMask");
-                walletAddressEl.textContent = "No accounts available";
-            }
         } catch (error) {
-            console.error("MetaMask connection error:", error);
+            console.error("Error connecting wallet:", error);
             if (error.code === 4001) {
-                walletAddressEl.textContent = "Connection request denied";
+                // User rejected request
+                walletAddressEl.textContent = "Connection rejected";
             } else {
                 walletAddressEl.textContent = "Connection failed";
             }
-        } finally {
-            isConnecting = false;
         }
     }
 
     // Load campaigns from the contract
     async function loadCampaigns() {
         try {
+            console.log("Loading campaigns...");
             campaignsListEl.innerHTML = "<p>Loading campaigns...</p>";
             
             const campaignCount = await contract.getCampaignCount();
+            console.log("Campaign count:", campaignCount.toString());
             
             if (campaignCount.toNumber() === 0) {
                 campaignsListEl.innerHTML = "<p>No active campaigns found.</p>";
@@ -115,7 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             for (let i = 1; i <= campaignCount; i++) {
                 try {
+                    console.log(`Loading campaign ${i}...`);
                     const campaign = await contract.getCampaignDetails(i);
+                    console.log(`Campaign ${i} details:`, campaign);
                     
                     // Create campaign card
                     const campaignCard = document.createElement('div');
@@ -215,9 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listen for account changes
     if (window.ethereum) {
-        window.ethereum.on('accountsChanged', accounts => {
+        window.ethereum.on('accountsChanged', (accounts) => {
+            console.log("Accounts changed:", accounts);
             if (accounts.length > 0) {
-                initializeWeb3(accounts[0]);
+                const account = accounts[0];
+                walletAddressEl.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
             } else {
                 walletAddressEl.textContent = "Not connected";
                 connectWalletBtn.textContent = "Connect Wallet";
@@ -226,10 +200,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Listen for chain changes
         window.ethereum.on('chainChanged', () => {
+            console.log("Chain changed, reloading page");
             window.location.reload(); // Recommended way to handle chain changes
         });
     }
-    
-    // Check for existing connections on page load
-    checkWalletConnection();
 });
