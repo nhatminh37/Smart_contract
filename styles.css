@@ -236,3 +236,121 @@ footer a:hover {
     margin-top: 10px;
     font-weight: bold;
 }
+
+/* Campaign card action buttons */
+.card-actions {
+    margin-top: 15px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.card-actions button {
+    flex: 1;
+    margin: 0 5px;
+    padding: 8px 0;
+    font-size: 0.9rem;
+}
+
+.card-actions button:first-child {
+    margin-left: 0;
+}
+
+.card-actions button:last-child {
+    margin-right: 0;
+}
+
+.donate-btn {
+    background-color: #2ecc71;
+}
+
+.donate-btn:hover {
+    background-color: #27ae60;
+}
+
+.proposal-btn {
+    background-color: #f39c12;
+}
+
+.proposal-btn:hover {
+    background-color: #d35400;
+}
+
+.view-proposals-btn {
+    background-color: #9b59b6;
+}
+
+.view-proposals-btn:hover {
+    background-color: #8e44ad;
+}
+
+/* Proposal card styles */
+.proposal-card {
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.proposal-card h3 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.proposal-actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+}
+
+.vote-for-btn {
+    background-color: #2ecc71;
+}
+
+.vote-for-btn:hover {
+    background-color: #27ae60;
+}
+
+.vote-against-btn {
+    background-color: #e74c3c;
+}
+
+.vote-against-btn:hover {
+    background-color: #c0392b;
+}
+
+.execute-btn {
+    background-color: #3498db;
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.execute-btn:hover {
+    background-color: #2980b9;
+}
+
+/* Proposal form styles */
+.proposal-section, .voting-section {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.proposal-section textarea {
+    width: 100%;
+    height: 100px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    margin-bottom: 10px;
+}
+
+#proposalStatus, #createCampaignStatus {
+    margin-top: 10px;
+    font-weight: bold;
+}

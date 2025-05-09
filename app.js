@@ -10,6 +10,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const donateBtn = document.getElementById('donateBtn');
     const donationStatusEl = document.getElementById('donationStatus');
 
+    // Create proposal and voting sections
+    const proposalSection = document.createElement('section');
+    proposalSection.className = 'proposal-section';
+    proposalSection.id = 'proposalSection';
+    proposalSection.style.display = 'none';
+    proposalSection.innerHTML = `
+        <h2>Create Fund Release Proposal</h2>
+        <p>As a donor, you can propose how funds should be used for this campaign.</p>
+        <form id="createProposalForm">
+            <div>
+                <label for="proposalDescription">Proposal Description:</label>
+                <textarea id="proposalDescription" placeholder="Describe how funds should be used" required></textarea>
+            </div>
+            <div>
+                <label for="proposalAmount">Amount (ETH):</label>
+                <input type="number" id="proposalAmount" placeholder="Amount to release" step="0.01" min="0.01" required>
+            </div>
+            <button type="submit" id="createProposalBtn">Submit Proposal</button>
+        </form>
+        <p id="proposalStatus"></p>
+    `;
+
+    const votingSection = document.createElement('section');
+    votingSection.className = 'voting-section';
+    votingSection.id = 'votingSection';
+    votingSection.style.display = 'none';
+    votingSection.innerHTML = `
+        <h2>Vote on Proposals</h2>
+        <p>Cast your vote on active proposals for fund distribution.</p>
+        <div id="proposalsList"></div>
+    `;
+
     // Add admin section to the HTML
     const mainEl = document.querySelector('main');
     const adminSection = document.createElement('section');
@@ -42,9 +74,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button type="submit" id="createCampaignBtn">Create Campaign</button>
             </form>
             <p id="createCampaignStatus"></p>
+
+            <h3>Execute Proposals</h3>
+            <div id="adminProposalsList"></div>
         </div>
     `;
-    mainEl.appendChild(adminSection);
+
+    // Insert sections in the correct order
+    const campaignsSection = document.querySelector('.campaigns-section');
+    mainEl.insertBefore(adminSection, campaignsSection.nextSibling);
+    mainEl.insertBefore(proposalSection, adminSection);
+    mainEl.insertBefore(votingSection, proposalSection);
 
     // Global variables
     let provider, signer, contract;
@@ -96,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentAccount === CONTRACT_OWNER) {
                 console.log("User is contract owner, displaying admin panel");
                 document.getElementById('adminPanel').style.display = 'block';
+                loadAdminProposals();
             } else {
                 console.log("User is not contract owner");
                 document.getElementById('adminPanel').style.display = 'none';
@@ -161,6 +202,97 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Create a proposal for fund release
+    async function createProposal(event) {
+        event.preventDefault();
+        
+        if (!selectedCampaignId) {
+            alert("Please select a campaign first");
+            return;
+        }
+        
+        const description = document.getElementById('proposalDescription').value;
+        const amount = ethers.utils.parseEther(document.getElementById('proposalAmount').value);
+        
+        const statusEl = document.getElementById('proposalStatus');
+        statusEl.textContent = "Creating proposal...";
+        
+        try {
+            const tx = await contract.createFundReleaseProposal(
+                selectedCampaignId,
+                description,
+                amount
+            );
+            
+            statusEl.textContent = "Transaction submitted! Waiting for confirmation...";
+            await tx.wait();
+            
+            statusEl.textContent = "Proposal created successfully!";
+            
+            // Reset form
+            document.getElementById('createProposalForm').reset();
+            
+            // Reload proposals
+            await loadProposals(selectedCampaignId);
+            
+        } catch (error) {
+            console.error("Error creating proposal:", error);
+            statusEl.textContent = "Error: " + (error.message || "Failed to create proposal");
+        }
+    }
+
+    // Vote on a proposal
+    async function voteOnProposal(proposalId, inSupport) {
+        try {
+            console.log(`Voting ${inSupport ? 'for' : 'against'} proposal ${proposalId}`);
+            
+            const tx = await contract.voteOnProposal(proposalId, inSupport);
+            await tx.wait();
+            
+            alert(`Vote ${inSupport ? 'for' : 'against'} proposal ${proposalId} has been recorded!`);
+            
+            // Reload proposals
+            if (selectedCampaignId) {
+                await loadProposals(selectedCampaignId);
+            }
+            if (currentAccount === CONTRACT_OWNER) {
+                await loadAdminProposals();
+            }
+            
+        } catch (error) {
+            console.error("Error voting on proposal:", error);
+            alert("Error: " + (error.message || "Failed to vote on proposal"));
+        }
+    }
+
+    // Execute a proposal (admin function)
+    async function executeProposal(proposalId) {
+        if (currentAccount !== CONTRACT_OWNER) {
+            alert("Only the contract owner can execute proposals");
+            return;
+        }
+        
+        try {
+            console.log(`Executing proposal ${proposalId}`);
+            
+            const tx = await contract.executeProposal(proposalId);
+            await tx.wait();
+            
+            alert(`Proposal ${proposalId} has been executed successfully!`);
+            
+            // Reload proposals and campaigns
+            loadCampaigns();
+            if (selectedCampaignId) {
+                await loadProposals(selectedCampaignId);
+            }
+            await loadAdminProposals();
+            
+        } catch (error) {
+            console.error("Error executing proposal:", error);
+            alert("Error: " + (error.message || "Failed to execute proposal"));
+        }
+    }
+
     // Load campaigns from the contract
     async function loadCampaigns() {
         try {
@@ -206,12 +338,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span>${ethers.utils.formatEther(campaign.targetAmount)} ETH</span> raised
                         </p>
                         <p>Status: ${campaign.isActive ? 'Active' : 'Inactive'}</p>
+                        <div class="card-actions">
+                            <button class="donate-btn">Donate</button>
+                            <button class="proposal-btn">Propose</button>
+                            <button class="view-proposals-btn">View Proposals</button>
+                        </div>
                     `;
                     
-                    // Add click event to select this campaign for donation
-                    campaignCard.addEventListener('click', () => selectCampaign(i, campaign.name));
-                    
                     campaignsListEl.appendChild(campaignCard);
+                    
+                    // Add event listeners to buttons
+                    const donateBtn = campaignCard.querySelector('.donate-btn');
+                    const proposeBtn = campaignCard.querySelector('.proposal-btn');
+                    const viewProposalsBtn = campaignCard.querySelector('.view-proposals-btn');
+                    
+                    donateBtn.addEventListener('click', () => selectCampaign(i, campaign.name));
+                    proposeBtn.addEventListener('click', () => openProposalForm(i, campaign.name));
+                    viewProposalsBtn.addEventListener('click', () => loadProposals(i));
+                    
                 } catch (error) {
                     console.error(`Error loading campaign ${i}:`, error);
                 }
@@ -222,14 +366,149 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Load proposals for a campaign
+    async function loadProposals(campaignId) {
+        const proposalsListEl = document.getElementById('proposalsList');
+        votingSection.style.display = 'block';
+        
+        try {
+            proposalsListEl.innerHTML = "<p>Loading proposals...</p>";
+            
+            // Get proposal count (You will need to add this function to your contract)
+            // Since we don't have a direct way to get this, we'll assume a maximum and try to load them
+            const maxProposalCount = 10; // Adjust based on your expectations
+            let foundProposals = false;
+            
+            proposalsListEl.innerHTML = ""; // Clear previous content
+            
+            for (let i = 1; i <= maxProposalCount; i++) {
+                try {
+                    // Try to get proposal details
+                    const proposal = await contract.proposals(i);
+                    
+                    // Check if this proposal belongs to the selected campaign
+                    if (proposal.campaignId.toString() === campaignId.toString()) {
+                        foundProposals = true;
+                        
+                        const proposalCard = document.createElement('div');
+                        proposalCard.className = 'proposal-card';
+                        
+                        const hasVoted = await contract.hasVotedOnProposal(i, currentAccount);
+                        const executed = proposal.executed;
+                        
+                        proposalCard.innerHTML = `
+                            <h3>Proposal #${proposal.id}</h3>
+                            <p>${proposal.description}</p>
+                            <p>Amount: ${ethers.utils.formatEther(proposal.amount)} ETH</p>
+                            <p>Votes For: ${proposal.votesFor}</p>
+                            <p>Votes Against: ${proposal.votesAgainst}</p>
+                            <p>Status: ${executed ? 'Executed' : 'Pending'}</p>
+                            <div class="proposal-actions" ${executed || hasVoted ? 'style="display:none;"' : ''}>
+                                <button class="vote-for-btn" data-id="${proposal.id}">Vote For</button>
+                                <button class="vote-against-btn" data-id="${proposal.id}">Vote Against</button>
+                            </div>
+                        `;
+                        
+                        proposalsListEl.appendChild(proposalCard);
+                        
+                        // Add event listeners for voting
+                        if (!executed && !hasVoted) {
+                            const voteForBtn = proposalCard.querySelector('.vote-for-btn');
+                            const voteAgainstBtn = proposalCard.querySelector('.vote-against-btn');
+                            
+                            voteForBtn.addEventListener('click', () => voteOnProposal(proposal.id, true));
+                            voteAgainstBtn.addEventListener('click', () => voteOnProposal(proposal.id, false));
+                        }
+                    }
+                } catch (error) {
+                    console.log(`No proposal at index ${i} or error:`, error);
+                }
+            }
+            
+            if (!foundProposals) {
+                proposalsListEl.innerHTML = "<p>No proposals found for this campaign.</p>";
+            }
+        } catch (error) {
+            console.error("Error loading proposals:", error);
+            proposalsListEl.innerHTML = "<p>Error loading proposals. Please try again.</p>";
+        }
+    }
+
+    // Load proposals for admin to execute
+    async function loadAdminProposals() {
+        const adminProposalsListEl = document.getElementById('adminProposalsList');
+        
+        try {
+            adminProposalsListEl.innerHTML = "<p>Loading proposals...</p>";
+            
+            // Similar to loadProposals but filter for ones that can be executed
+            const maxProposalCount = 10;
+            let foundProposals = false;
+            
+            adminProposalsListEl.innerHTML = "";
+            
+            for (let i = 1; i <= maxProposalCount; i++) {
+                try {
+                    const proposal = await contract.proposals(i);
+                    
+                    // Only show proposals that are not executed and have more votes for than against
+                    if (!proposal.executed && proposal.votesFor.gt(proposal.votesAgainst)) {
+                        foundProposals = true;
+                        
+                        const proposalCard = document.createElement('div');
+                        proposalCard.className = 'proposal-card';
+                        
+                        proposalCard.innerHTML = `
+                            <h3>Proposal #${proposal.id} (Campaign #${proposal.campaignId})</h3>
+                            <p>${proposal.description}</p>
+                            <p>Amount: ${ethers.utils.formatEther(proposal.amount)} ETH</p>
+                            <p>Votes For: ${proposal.votesFor}</p>
+                            <p>Votes Against: ${proposal.votesAgainst}</p>
+                            <button class="execute-btn" data-id="${proposal.id}">Execute Proposal</button>
+                        `;
+                        
+                        adminProposalsListEl.appendChild(proposalCard);
+                        
+                        // Add event listener for execution
+                        const executeBtn = proposalCard.querySelector('.execute-btn');
+                        executeBtn.addEventListener('click', () => executeProposal(proposal.id));
+                    }
+                } catch (error) {
+                    console.log(`No proposal at index ${i} or error:`, error);
+                }
+            }
+            
+            if (!foundProposals) {
+                adminProposalsListEl.innerHTML = "<p>No proposals ready for execution.</p>";
+            }
+        } catch (error) {
+            console.error("Error loading admin proposals:", error);
+            adminProposalsListEl.innerHTML = "<p>Error loading proposals. Please try again.</p>";
+        }
+    }
+
     // Select a campaign for donation
     function selectCampaign(id, name) {
         selectedCampaignId = id;
         selectedCampaignEl.textContent = `Selected Campaign: ${name}`;
         donationFormEl.style.display = 'block';
+        proposalSection.style.display = 'none';
+        votingSection.style.display = 'none';
         
         // Scroll to donation form
         donationFormEl.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Open proposal form for a campaign
+    function openProposalForm(id, name) {
+        selectedCampaignId = id;
+        document.querySelector('#proposalSection h2').textContent = `Create Proposal for: ${name}`;
+        proposalSection.style.display = 'block';
+        donationFormEl.style.display = 'none';
+        votingSection.style.display = 'none';
+        
+        // Scroll to proposal form
+        proposalSection.scrollIntoView({ behavior: 'smooth' });
     }
 
     // Make a donation
@@ -265,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
             donationStatusEl.textContent = "Thank you for your donation!";
             donationAmountEl.value = "";
             
-            // Reload campaigns to show updated amounts
+            // Reload campaigns
             loadCampaigns();
         } catch (error) {
             console.error("Error making donation:", error);
@@ -279,6 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWalletBtn.addEventListener('click', connectWallet);
     donateBtn.addEventListener('click', donate);
     document.getElementById('createCampaignForm').addEventListener('submit', createCampaign);
+    document.getElementById('createProposalForm').addEventListener('submit', createProposal);
 
     // Listen for account changes
     if (window.ethereum) {
@@ -286,10 +566,24 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Accounts changed:", accounts);
             if (accounts.length > 0) {
                 const account = accounts[0];
+                currentAccount = account.toLowerCase();
                 walletAddressEl.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
+                
+                // Check if user is contract owner
+                if (currentAccount === CONTRACT_OWNER) {
+                    document.getElementById('adminPanel').style.display = 'block';
+                    loadAdminProposals();
+                } else {
+                    document.getElementById('adminPanel').style.display = 'none';
+                }
+                
+                // Reload campaigns
+                loadCampaigns();
             } else {
                 walletAddressEl.textContent = "Not connected";
                 connectWalletBtn.textContent = "Connect Wallet";
+                currentAccount = null;
+                document.getElementById('adminPanel').style.display = 'none';
             }
         });
         
