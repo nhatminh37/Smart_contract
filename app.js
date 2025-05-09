@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Web3 and contract
     async function initializeWeb3(account) {
         try {
+            console.log("Initializing Web3 with account:", account);
             provider = new ethers.providers.Web3Provider(window.ethereum);
             signer = provider.getSigner();
             walletAddressEl.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
@@ -43,13 +44,16 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Check correct network (Sepolia)
             const network = await provider.getNetwork();
+            console.log("Connected to network:", network.name, "Chain ID:", network.chainId);
             if (network.chainId !== 11155111) { // Sepolia chain ID
                 walletAddressEl.textContent = "Please connect to Sepolia Testnet";
+                console.log("Wrong network. Please connect to Sepolia Testnet");
                 return;
             }
             
             // Initialize contract
             contract = new ethers.Contract(contractAddress, contractABI, signer);
+            console.log("Contract initialized at address:", contractAddress);
             
             // Load campaigns
             loadCampaigns();
@@ -65,15 +69,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!window.ethereum) {
             alert("Please install MetaMask to use this application");
             walletAddressEl.textContent = "MetaMask not detected";
+            console.error("MetaMask not detected");
             return;
         }
         
         isConnecting = true;
+        console.log("Attempting to connect to MetaMask...");
         try {
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
-            const accounts = await provider.listAccounts();
-            if (accounts.length > 0) {
+            // Request accounts from MetaMask
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            console.log("Accounts returned:", accounts);
+            
+            // Initialize web3 with the first account if accounts were returned
+            if (accounts && accounts.length > 0) {
                 initializeWeb3(accounts[0]);
+            } else {
+                console.error("No accounts returned from MetaMask");
+                walletAddressEl.textContent = "No accounts available";
             }
         } catch (error) {
             console.error("MetaMask connection error:", error);
