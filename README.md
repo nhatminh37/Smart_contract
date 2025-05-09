@@ -3,12 +3,9 @@
 A blockchain-based platform for transparent charity and disaster relief fundraising, allowing donors to track and vote on how funds are distributed.
 
 ## Ethereum Testnet Used
-This project is deployed on the **Sepolia Testnet**. The smart contract address is: `0x89668b2f0934aC4607A7DF32A23be8E4959B9d8e`
+This project is deployed on the **Sepolia Testnet**. The smart contract address is: `0xb21d8633e9354bd9df7f8f6b92f70314ef00df18`
 ## Website 
-The website is available at : https://nhatminh37.github.io/Smart_contract/
-## Interface
-The frontend is deployed and available for live demonstration at:
-https://nhatminh37.github.io/Smart_contract/frontend
+The website is available at: https://nhatminh37.github.io/Smart_contract/
 
 ## Features
 
@@ -22,11 +19,11 @@ https://nhatminh37.github.io/Smart_contract/frontend
 
 - `contracts/` - Smart contract code
   - `CharityFund.sol` - Main contract for the charity platform
-- `frontend/` - Web interface
-  - `index.html` - Main HTML file
-  - `styles.css` - CSS styling
-  - `app.js` - JavaScript for frontend functionality
-  - `contract-abi.js` - Contract ABI and address
+- `index.html` - Main HTML file
+- `styles.css` - CSS styling
+- `app.js` - JavaScript for frontend functionality
+- `contract-abi.js` - Contract ABI and address
+
 ### Prerequisites
 
 - MetaMask browser extension
