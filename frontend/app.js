@@ -13,21 +13,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // Global variables
     let provider, signer, contract;
     let selectedCampaignId = null;
+    let isConnecting = false;
 
-    // Connect to MetaMask
-    async function connectWallet() {
-        if (!window.ethereum) {
-            alert("Please install MetaMask to use this application");
+    // Check if wallet is already connected
+    async function checkWalletConnection() {
+        if (window.ethereum) {
+            try {
+                // Check if we're already connected
+                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                if (accounts.length > 0) {
+                    initializeWeb3(accounts[0]);
+                }
+            } catch (error) {
+                console.error("Error checking initial wallet connection:", error);
+            }
+        } else {
+            console.log("MetaMask not detected");
             walletAddressEl.textContent = "MetaMask not detected";
-            return;
         }
+    }
+
+    // Initialize Web3 and contract
+    async function initializeWeb3(account) {
         try {
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
             provider = new ethers.providers.Web3Provider(window.ethereum);
             signer = provider.getSigner();
-            const address = await signer.getAddress();
-            walletAddressEl.textContent = `${address.substring(0, 6)}...${address.substring(38)}`;
+            walletAddressEl.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
             connectWalletBtn.textContent = "Connected";
+            
+            // Check correct network (Sepolia)
+            const network = await provider.getNetwork();
+            if (network.chainId !== 11155111) { // Sepolia chain ID
+                walletAddressEl.textContent = "Please connect to Sepolia Testnet";
+                return;
+            }
             
             // Initialize contract
             contract = new ethers.Contract(contractAddress, contractABI, signer);
@@ -35,12 +54,36 @@ document.addEventListener('DOMContentLoaded', () => {
             // Load campaigns
             loadCampaigns();
         } catch (error) {
+            console.error("Error initializing Web3:", error);
+        }
+    }
+
+    // Connect to MetaMask
+    async function connectWallet() {
+        if (isConnecting) return; // Prevent multiple simultaneous connection attempts
+        
+        if (!window.ethereum) {
+            alert("Please install MetaMask to use this application");
+            walletAddressEl.textContent = "MetaMask not detected";
+            return;
+        }
+        
+        isConnecting = true;
+        try {
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const accounts = await provider.listAccounts();
+            if (accounts.length > 0) {
+                initializeWeb3(accounts[0]);
+            }
+        } catch (error) {
             console.error("MetaMask connection error:", error);
             if (error.code === 4001) {
                 walletAddressEl.textContent = "Connection request denied";
             } else {
                 walletAddressEl.textContent = "Connection failed";
             }
+        } finally {
+            isConnecting = false;
         }
     }
 
@@ -50,42 +93,50 @@ document.addEventListener('DOMContentLoaded', () => {
             campaignsListEl.innerHTML = "<p>Loading campaigns...</p>";
             
             const campaignCount = await contract.getCampaignCount();
-            let campaignsHTML = '';
             
             if (campaignCount.toNumber() === 0) {
                 campaignsListEl.innerHTML = "<p>No active campaigns found.</p>";
                 return;
             }
             
+            campaignsListEl.innerHTML = ""; // Clear previous content
+            
             for (let i = 1; i <= campaignCount; i++) {
-                const campaign = await contract.getCampaignDetails(i);
-                
-                // Create campaign card
-                const campaignCard = document.createElement('div');
-                campaignCard.className = 'campaign-card';
-                campaignCard.dataset.id = i;
-                
-                const progressPercentage = campaign[3].gt(0) 
-                    ? (campaign[4].mul(100).div(campaign[3])).toNumber() 
-                    : 0;
-                
-                campaignCard.innerHTML = `
-                    <h3>${campaign[0]}</h3>
-                    <p>${campaign[1]}</p>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progressPercentage}%"></div>
-                    </div>
-                    <p>
-                        <span>${ethers.utils.formatEther(campaign[4])} ETH</span> of 
-                        <span>${ethers.utils.formatEther(campaign[3])} ETH</span> raised
-                    </p>
-                    <p>Status: ${campaign[6] ? 'Active' : 'Inactive'}</p>
-                `;
-                
-                // Add click event to select this campaign for donation
-                campaignCard.addEventListener('click', () => selectCampaign(i, campaign[0]));
-                
-                campaignsListEl.appendChild(campaignCard);
+                try {
+                    const campaign = await contract.getCampaignDetails(i);
+                    
+                    // Create campaign card
+                    const campaignCard = document.createElement('div');
+                    campaignCard.className = 'campaign-card';
+                    campaignCard.dataset.id = i;
+                    
+                    const progressPercentage = campaign.targetAmount.gt(0) 
+                        ? (campaign.raisedAmount.mul(100).div(campaign.targetAmount)).toNumber() 
+                        : 0;
+                    
+                    campaignCard.innerHTML = `
+                        <h3>${campaign.name}</h3>
+                        <p>${campaign.description}</p>
+                        <div class="campaign-image">
+                            <img src="${campaign.imageURI}" alt="${campaign.name}">
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progressPercentage}%"></div>
+                        </div>
+                        <p>
+                            <span>${ethers.utils.formatEther(campaign.raisedAmount)} ETH</span> of 
+                            <span>${ethers.utils.formatEther(campaign.targetAmount)} ETH</span> raised
+                        </p>
+                        <p>Status: ${campaign.isActive ? 'Active' : 'Inactive'}</p>
+                    `;
+                    
+                    // Add click event to select this campaign for donation
+                    campaignCard.addEventListener('click', () => selectCampaign(i, campaign.name));
+                    
+                    campaignsListEl.appendChild(campaignCard);
+                } catch (error) {
+                    console.error(`Error loading campaign ${i}:`, error);
+                }
             }
         } catch (error) {
             console.error("Error loading campaigns:", error);
@@ -154,11 +205,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', accounts => {
             if (accounts.length > 0) {
-                connectWallet();
+                initializeWeb3(accounts[0]);
             } else {
                 walletAddressEl.textContent = "Not connected";
                 connectWalletBtn.textContent = "Connect Wallet";
             }
         });
+        
+        // Listen for chain changes
+        window.ethereum.on('chainChanged', () => {
+            window.location.reload(); // Recommended way to handle chain changes
+        });
     }
+    
+    // Check for existing connections on page load
+    checkWalletConnection();
 });

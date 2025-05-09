@@ -188,6 +188,49 @@ contract CharityFund is Ownable, ReentrancyGuard {
         emit FundsReleased(campaignId, proposal.amount);
     }
 
+    // View functions needed by the frontend
+    /**
+     * @dev Get the total number of campaigns
+     */
+    function getCampaignCount() public view returns (uint256) {
+        return _campaignIds.current();
+    }
+
+    /**
+     * @dev Get campaign details
+     */
+    function getCampaignDetails(uint256 campaignId) public view campaignExists(campaignId) 
+        returns (
+            string memory name,
+            string memory description,
+            string memory imageURI,
+            uint256 targetAmount,
+            uint256 raisedAmount,
+            address beneficiary,
+            bool isActive,
+            bool fundsReleased
+        ) 
+    {
+        Campaign storage campaign = campaigns[campaignId];
+        return (
+            campaign.name,
+            campaign.description,
+            campaign.imageURI,
+            campaign.targetAmount,
+            campaign.raisedAmount,
+            campaign.beneficiary,
+            campaign.isActive,
+            campaign.fundsReleased
+        );
+    }
+
+    /**
+     * @dev Get donation amount for an address in a specific campaign
+     */
+    function getDonationAmount(uint256 campaignId, address donor) public view campaignExists(campaignId) returns (uint256) {
+        return campaigns[campaignId].donations[donor];
+    }
+
     // Modifiers
     modifier onlyDonor(uint256 campaignId) {
         bool isDonor = false;
