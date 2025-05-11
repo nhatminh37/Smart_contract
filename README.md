@@ -1,24 +1,11 @@
-# Transparency Trust - Decentralized Platforms for Charity and Lending
+# P2P Decentralized Lending Platform with Reputation Scoring
 
-A blockchain-based ecosystem featuring a transparent charity fundraising platform and a peer-to-peer lending platform with reputation scoring.
+A blockchain-based peer-to-peer lending platform where interest rates are dynamically adjusted based on borrowers' on-chain reputation scores.
 
-## Ethereum Testnet Used
-This project is deployed on the **Sepolia Testnet**. The charity smart contract address is: `0xb21d8633e9354bd9df7f8f6b92f70314ef00df18`. The lending platform contract will be deployed separately.
+## Ethereum Testnet
+This project is designed to be deployed on the **Sepolia Testnet**.
 
-## Website 
-The website is available at: https://nhatminh37.github.io/Smart_contract/
-
-## Platforms
-
-### 1. Charity Platform
-
-- **Transparent Fundraising**: All donations are recorded on the blockchain
-- **Democratic Fund Distribution**: Donors can vote on proposals for how funds should be used
-- **Campaign Creation**: Admins can create campaigns for various causes
-- **Fund Release Proposals**: Create and vote on proposals for fund distribution
-- **Real-time Tracking**: See donation progress and voting results in real-time
-
-### 2. P2P Lending Platform with Reputation Scoring
+## Features
 
 - **Dynamic Interest Rates**: Interest rates are adjusted based on borrowers' on-chain reputation scores
 - **Reputation System**: User reputation is calculated based on transaction history and collateralization ratios
@@ -29,30 +16,16 @@ The website is available at: https://nhatminh37.github.io/Smart_contract/
 ## Project Structure
 
 - `contracts/` - Smart contract code
-  - `CharityFund.sol` - Contract for the charity platform
   - `LendingPlatform.sol` - Contract for the P2P lending platform
-- `frontend/` - Frontend code for the lending platform
-  - `lending.html` - Main HTML for the lending platform
-  - `lending-app.js` - JavaScript for the lending platform
-  - `lending-abi.js` - ABI for the lending contract
-- `index.html` - Main HTML file for the charity platform
-- `styles.css` - CSS styling for both platforms
-- `app.js` - JavaScript for the charity platform
-- `contract-abi.js` - Contract ABI for the charity platform
+- `lending.html` - Main HTML for the lending platform
+- `lending-app.js` - JavaScript for the lending platform
+- `lending-abi.js` - ABI for the lending contract
+- `styles.css` - CSS styling for the platform
 
 ### Prerequisites
 
 - MetaMask browser extension
 - Sepolia testnet account with test ETH
-
-## Using the Charity Platform
-
-1. **Connect Wallet**: Click "Connect Wallet" and approve the MetaMask connection
-2. **View Campaigns**: Browse active charity campaigns
-3. **Make Donations**: Donate ETH to a campaign
-4. **Create Proposals**: If you're a donor, propose how funds should be used
-5. **Vote on Proposals**: Vote for or against proposals for fund distribution
-6. **Admin Functions**: Contract owners can create campaigns and execute passed proposals
 
 ## Using the P2P Lending Platform
 
@@ -67,7 +40,7 @@ The website is available at: https://nhatminh37.github.io/Smart_contract/
 
 ## Testnet Faucets
 
-Get test ETH for trying the applications:
+Get test ETH for trying the application:
 - [Sepolia Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
 - [Sepolia Faucet (Alchemy)](https://www.alchemy.com/faucets/ethereum-sepolia)
 
