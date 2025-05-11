@@ -6,6 +6,8 @@
     <title>P2P Decentralized Lending Platform</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Make sure ethers.js is loaded from a reliable CDN -->
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
     <style>
         :root {
             --primary-color: #3a86ff;
@@ -514,7 +516,7 @@
         </div>
         <nav>
             <ul>
-                <li><a href="lending.html" class="active">P2P Lending</a></li>
+                <li><a href="#" class="active">P2P Lending</a></li>
             </ul>
         </nav>
         <div class="wallet-connect">
@@ -732,8 +734,7 @@
         <p>&copy; 2023 P2P Lending Platform | <a href="#">Terms of Service</a> | <a href="#">Privacy Policy</a></p>
     </footer>
 
-    <!-- Scripts -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <!-- Order of scripts is important -->
     <script src="lending-abi.js"></script>
     <script src="lending-app.js"></script>
 </body>

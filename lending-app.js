@@ -5,22 +5,33 @@ let lendingContract;
 let currentAccount;
 let isRegistered = false;
 
+// Check if ethers is loaded
+console.log("Checking ethers library:", typeof ethers !== 'undefined' ? "Loaded" : "Not loaded");
+
 // Wait for DOM content to load
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("Application initialized. Please connect your wallet to continue.");
+    console.log("DOM content loaded, initializing application...");
+    
     // Initialize UI event listeners
     initializeUI();
     
     // Check if MetaMask is installed
     if (typeof window.ethereum !== 'undefined') {
-        // Initialize provider
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        
-        // Check if already connected
-        const accounts = await provider.listAccounts();
-        if (accounts.length > 0) {
-            console.log("Found connected accounts:", accounts);
-            await connectWallet();
+        console.log("MetaMask detected");
+        try {
+            // Initialize provider
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            console.log("Web3Provider initialized successfully");
+            
+            // Check if already connected
+            const accounts = await provider.listAccounts();
+            console.log("Found accounts:", accounts);
+            if (accounts.length > 0) {
+                await connectWallet();
+            }
+        } catch (error) {
+            console.error("Error initializing provider:", error);
+            alert("Error initializing Web3: " + error.message);
         }
     } else {
         console.error("MetaMask not detected!");
