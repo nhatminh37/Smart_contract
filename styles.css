@@ -18,6 +18,37 @@ header {
     padding: 2rem;
 }
 
+.main-nav {
+    margin-top: 15px;
+}
+
+.main-nav ul {
+    display: flex;
+    justify-content: center;
+    list-style: none;
+}
+
+.main-nav li {
+    margin: 0 15px;
+}
+
+.main-nav a {
+    color: white;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.main-nav a:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.main-nav a.active {
+    background-color: rgba(255, 255, 255, 0.3);
+    font-weight: bold;
+}
+
 .testnet-info {
     background-color: rgba(255, 255, 255, 0.2);
     padding: 10px;
@@ -116,6 +147,62 @@ input {
 
 .testnet-help a:hover {
     text-decoration: underline;
+}
+
+.platform-links h2 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.platform-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 20px;
+    background-color: white;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    transition: transform 0.3s;
+}
+
+.platform-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+
+.platform-card h3 {
+    color: #3498db;
+    font-size: 1.4rem;
+    margin-bottom: 15px;
+}
+
+.platform-card p {
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.platform-card ul {
+    list-style-type: disc;
+    padding-left: 20px;
+    margin-bottom: 20px;
+}
+
+.platform-card li {
+    margin-bottom: 8px;
+}
+
+.platform-card .btn {
+    display: inline-block;
+    background-color: #3498db;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.platform-card .btn:hover {
+    background-color: #2980b9;
 }
 
 .campaign-card {

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Decentralized Lending Platform</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #3a86ff;
+            --secondary-color: #6c757d;
+            --accent-color: #ff006e;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+        
+        /* Additional styles specific to lending platform */
+        .reputation-score {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-align: center;
+            color: var(--primary-color);
+        }
+        
+        .reputation-meter {
+            width: 100%;
+            height: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        .reputation-meter .fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.5s ease-in-out;
+        }
+        
+        .stat-box {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+        
+        .stat-title {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--dark-color);
+        }
+        
+        .loan-request-card, .active-loan-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        
+        .loan-request-card:hover, .active-loan-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .interest-rate {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+        
+        .collateral-ratio {
+            padding: 5px 10px;
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .high-collateral {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--success-color);
+        }
+        
+        .medium-collateral {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .low-collateral {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Form styles */
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .input-group input, .input-group select, .input-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        .input-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2168c9;
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <i class="fas fa-handshake"></i>
+            <h1>P2P Lending</h1>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="index.html">Main Platform</a></li>
+                <li><a href="lending.html" class="active">Lending Platform</a></li>
+            </ul>
+        </nav>
+        <div class="wallet-connect">
+            <button id="connectWalletBtn" class="btn-primary">Connect Wallet</button>
+            <div id="walletInfo" style="display: none;">
+                <span id="walletAddress"></span>
+                <span id="walletBalance"></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="registerSection" style="display: none;">
+            <div class="card">
+                <h2>Register as a User</h2>
+                <p>You need to register to use the P2P lending platform.</p>
+                <button id="registerBtn" class="btn-primary">Register Now</button>
+            </div>
+        </section>
+
+        <section id="platformSection" style="display: none;">
+            <div class="tabs">
+                <div class="tab active" data-tab="dashboard">Dashboard</div>
+                <div class="tab" data-tab="loanRequests">Loan Requests</div>
+                <div class="tab" data-tab="myLoans">My Loans</div>
+                <div class="tab" data-tab="myInvestments">My Investments</div>
+                <div class="tab" data-tab="createRequest">Request Loan</div>
+            </div>
+
+            <!-- Dashboard Tab -->
+            <div id="dashboardTab" class="tab-content active">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <h3>Reputation Score</h3>
+                            <div class="reputation-score" id="reputationScore">--</div>
+                            <div class="reputation-meter">
+                                <div class="fill" id="reputationMeter" style="width: 50%;"></div>
+                            </div>
+                            <p class="text-center">Your on-chain reputation affects interest rates</p>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="stat-box">
+                                    <div class="stat-title">Loans Requested</div>
+                                    <div class="stat-value" id="loansRequestedStat">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="stat-box">
+                                    <div class="stat-title">Loans Funded</div>
+                                    <div class="stat-value" id="loansFundedStat">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="stat-box">
+                                    <div class="stat-title">Repaid On Time</div>
+                                    <div class="stat-value" id="loansRepaidStat">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="stat-box">
+                                    <div class="stat-title">Defaults</div>
+                                    <div class="stat-value" id="loansDefaultedStat">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="stat-box">
+                                    <div class="stat-title">Avg. Collateralization</div>
+                                    <div class="stat-value" id="collateralizationStat">0%</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="stat-box">
+                                    <div class="stat-title">Total Transactions</div>
+                                    <div class="stat-value" id="transactionsStat">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loan Requests Tab -->
+            <div id="loanRequestsTab" class="tab-content">
+                <h2>Active Loan Requests</h2>
+                <div id="activeLoanRequestsContainer">
+                    <p>Loading loan requests...</p>
+                </div>
+            </div>
+
+            <!-- My Loans Tab -->
+            <div id="myLoansTab" class="tab-content">
+                <h2>My Active Loans</h2>
+                <div id="myActiveLoansContainer">
+                    <p>Loading your active loans...</p>
+                </div>
+            </div>
+
+            <!-- My Investments Tab -->
+            <div id="myInvestmentsTab" class="tab-content">
+                <h2>My Investments</h2>
+                <div id="myInvestmentsContainer">
+                    <p>Loading your investments...</p>
+                </div>
+            </div>
+
+            <!-- Create Loan Request Tab -->
+            <div id="createRequestTab" class="tab-content">
+                <div class="card">
+                    <h2>Request a Loan</h2>
+                    <form id="loanRequestForm">
+                        <div class="input-group">
+                            <label for="loanAmount">Loan Amount (ETH)</label>
+                            <input type="number" id="loanAmount" step="0.01" min="0.01" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="loanDuration">Duration (Days)</label>
+                            <input type="number" id="loanDuration" min="1" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="baseInterestRate">Base Interest Rate (% per year)</label>
+                            <input type="number" id="baseInterestRate" step="0.1" min="1" required>
+                            <p class="form-text">Note: Actual interest rate may be adjusted based on your reputation score.</p>
+                        </div>
+                        <div class="input-group">
+                            <label for="loanPurpose">Loan Purpose</label>
+                            <textarea id="loanPurpose" required></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label for="collateralAmount">Collateral Amount (ETH)</label>
+                            <input type="number" id="collateralAmount" step="0.01" min="0.01" required>
+                            <p class="form-text">Higher collateral improves your chances of getting funded and affects your reputation.</p>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">Create Loan Request</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Spinner -->
+        <div id="loadingSpinner" style="display: none;">
+            <div class="spinner"></div>
+            <p>Processing transaction...</p>
+        </div>
+
+        <!-- Loan Request Details Modal -->
+        <div id="loanDetailsModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Loan Request Details</h2>
+                <div id="loanDetailsContent"></div>
+                <div id="fundLoanForm" style="display: none;">
+                    <h3>Fund this Loan</h3>
+                    <p>You are about to fund <span id="fundAmount"></span> ETH to this loan request.</p>
+                    <button id="confirmFundBtn" class="btn-primary">Confirm Funding</button>
+                    <button class="btn-secondary close-modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Repay Loan Modal -->
+        <div id="repayLoanModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Repay Loan</h2>
+                <div id="repayLoanContent"></div>
+                <form id="repayLoanForm">
+                    <div class="input-group">
+                        <label for="repayAmount">Amount to Repay (ETH)</label>
+                        <input type="number" id="repayAmount" step="0.01" min="0.01" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Repay</button>
+                    <button type="button" class="btn-secondary close-modal">Cancel</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2023 P2P Lending Platform | <a href="#">Terms of Service</a> | <a href="#">Privacy Policy</a></p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <script src="lending-abi.js"></script>
+    <script src="lending-app.js"></script>
+</body>
+</html> 
