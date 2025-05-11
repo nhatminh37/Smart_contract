@@ -212,12 +212,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const description = document.getElementById('proposalDescription').value;
-        const amount = ethers.utils.parseEther(document.getElementById('proposalAmount').value);
+        const amountInEth = document.getElementById('proposalAmount').value;
+        
+        if (!description) {
+            alert("Please enter a proposal description");
+            return;
+        }
+        
+        if (!amountInEth || parseFloat(amountInEth) <= 0) {
+            alert("Please enter a valid amount greater than 0");
+            return;
+        }
+        
+        const amount = ethers.utils.parseEther(amountInEth);
         
         const statusEl = document.getElementById('proposalStatus');
         statusEl.textContent = "Creating proposal...";
         
+        console.log(`Creating proposal for campaign ${selectedCampaignId}:`);
+        console.log(`- Description: ${description}`);
+        console.log(`- Amount: ${amountInEth} ETH (${amount.toString()} wei)`);
+        
         try {
+            // Check if user is a donor (has donated to this campaign)
+            try {
+                const donationAmount = await contract.getDonationAmount(selectedCampaignId, currentAccount);
+                console.log(`User donation amount for campaign ${selectedCampaignId}: ${donationAmount.toString()}`);
+                
+                if (donationAmount.eq(0)) {
+                    statusEl.textContent = "Error: You must be a donor to create a proposal";
+                    alert("You must donate to this campaign before you can create a proposal");
+                    return;
+                }
+            } catch (error) {
+                console.warn("Couldn't verify donation status:", error);
+                // Continue anyway since the contract will enforce this
+            }
+            
+            // Create the proposal transaction
+            console.log("Submitting proposal transaction...");
             const tx = await contract.createFundReleaseProposal(
                 selectedCampaignId,
                 description,
@@ -225,7 +258,12 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             
             statusEl.textContent = "Transaction submitted! Waiting for confirmation...";
-            await tx.wait();
+            console.log("Transaction hash:", tx.hash);
+            
+            // Wait for transaction to be mined
+            console.log("Waiting for transaction confirmation...");
+            const receipt = await tx.wait();
+            console.log("Transaction confirmed in block:", receipt.blockNumber);
             
             statusEl.textContent = "Proposal created successfully!";
             
@@ -235,9 +273,16 @@ document.addEventListener('DOMContentLoaded', () => {
             // Reload proposals
             await loadProposals(selectedCampaignId);
             
+            // Scroll to voting section
+            document.getElementById('votingSection').scrollIntoView({ behavior: 'smooth' });
+            
         } catch (error) {
             console.error("Error creating proposal:", error);
             statusEl.textContent = "Error: " + (error.message || "Failed to create proposal");
+            
+            if (error.message && error.message.includes("only donors")) {
+                alert("You must be a donor to create a proposal. Please donate to this campaign first.");
+            }
         }
     }
 
@@ -372,65 +417,90 @@ document.addEventListener('DOMContentLoaded', () => {
         votingSection.style.display = 'block';
         
         try {
+            console.log(`Loading proposals for campaign ${campaignId}...`);
             proposalsListEl.innerHTML = "<p>Loading proposals...</p>";
             
-            // Get proposal count (You will need to add this function to your contract)
-            // Since we don't have a direct way to get this, we'll assume a maximum and try to load them
-            const maxProposalCount = 10; // Adjust based on your expectations
+            // Try a direct method first - if there's a getProposalCount function
+            let proposalCount = 0;
+            try {
+                // Try to get proposal count if this function exists
+                proposalCount = await contract.getProposalCount();
+                console.log(`Total proposals from contract: ${proposalCount}`);
+            } catch (error) {
+                console.log("No getProposalCount function available, using manual iteration");
+                // Fall back to manual iteration
+                proposalCount = 20; // Try a higher number to be safe
+            }
+            
+            // Clear previous content
+            proposalsListEl.innerHTML = ""; 
             let foundProposals = false;
             
-            proposalsListEl.innerHTML = ""; // Clear previous content
+            console.log(`Attempting to find proposals for campaign ID: ${campaignId}`);
             
-            for (let i = 1; i <= maxProposalCount; i++) {
+            // Debug the contract's methods
+            console.log("Available contract methods:", Object.keys(contract.functions));
+            
+            for (let i = 1; i <= proposalCount; i++) {
                 try {
+                    console.log(`Attempting to fetch proposal ${i}...`);
                     // Try to get proposal details
                     const proposal = await contract.proposals(i);
+                    console.log(`Proposal ${i} data:`, proposal);
+                    
+                    // Ensure this is a valid proposal by checking if it has an expected property
+                    if (!proposal || !proposal.campaignId) {
+                        console.log(`Proposal ${i} doesn't exist or is invalid`);
+                        continue;
+                    }
                     
                     // Check if this proposal belongs to the selected campaign
                     if (proposal.campaignId.toString() === campaignId.toString()) {
+                        console.log(`Found matching proposal ${i} for campaign ${campaignId}`);
                         foundProposals = true;
                         
                         const proposalCard = document.createElement('div');
                         proposalCard.className = 'proposal-card';
                         
-                        const hasVoted = await contract.hasVotedOnProposal(i, currentAccount);
-                        const executed = proposal.executed;
-                        
+                        // Display basic proposal info
                         proposalCard.innerHTML = `
-                            <h3>Proposal #${proposal.id}</h3>
-                            <p>${proposal.description}</p>
+                            <h3>Proposal #${i}</h3>
+                            <p>${proposal.description || "No description available"}</p>
                             <p>Amount: ${ethers.utils.formatEther(proposal.amount)} ETH</p>
-                            <p>Votes For: ${proposal.votesFor}</p>
-                            <p>Votes Against: ${proposal.votesAgainst}</p>
-                            <p>Status: ${executed ? 'Executed' : 'Pending'}</p>
-                            <div class="proposal-actions" ${executed || hasVoted ? 'style="display:none;"' : ''}>
-                                <button class="vote-for-btn" data-id="${proposal.id}">Vote For</button>
-                                <button class="vote-against-btn" data-id="${proposal.id}">Vote Against</button>
+                            <p>Votes For: ${proposal.votesFor.toString()}</p>
+                            <p>Votes Against: ${proposal.votesAgainst.toString()}</p>
+                            <p>Status: ${proposal.executed ? 'Executed' : 'Pending'}</p>
+                            <div class="proposal-actions">
+                                <button class="vote-for-btn" data-id="${i}">Vote For</button>
+                                <button class="vote-against-btn" data-id="${i}">Vote Against</button>
                             </div>
                         `;
                         
                         proposalsListEl.appendChild(proposalCard);
                         
                         // Add event listeners for voting
-                        if (!executed && !hasVoted) {
-                            const voteForBtn = proposalCard.querySelector('.vote-for-btn');
-                            const voteAgainstBtn = proposalCard.querySelector('.vote-against-btn');
-                            
-                            voteForBtn.addEventListener('click', () => voteOnProposal(proposal.id, true));
-                            voteAgainstBtn.addEventListener('click', () => voteOnProposal(proposal.id, false));
-                        }
+                        const voteForBtn = proposalCard.querySelector('.vote-for-btn');
+                        const voteAgainstBtn = proposalCard.querySelector('.vote-against-btn');
+                        
+                        voteForBtn.addEventListener('click', () => voteOnProposal(i, true));
+                        voteAgainstBtn.addEventListener('click', () => voteOnProposal(i, false));
+                    } else {
+                        console.log(`Proposal ${i} belongs to campaign ${proposal.campaignId.toString()}, not ${campaignId}`);
                     }
                 } catch (error) {
-                    console.log(`No proposal at index ${i} or error:`, error);
+                    console.log(`Error loading proposal ${i}:`, error);
                 }
             }
             
             if (!foundProposals) {
-                proposalsListEl.innerHTML = "<p>No proposals found for this campaign.</p>";
+                proposalsListEl.innerHTML = `
+                    <p>No proposals found for this campaign.</p>
+                    <p>As a donor, you can create a proposal for how funds should be used.</p>
+                `;
             }
         } catch (error) {
             console.error("Error loading proposals:", error);
-            proposalsListEl.innerHTML = "<p>Error loading proposals. Please try again.</p>";
+            proposalsListEl.innerHTML = "<p>Error loading proposals. Please try again.</p><p>Details: " + error.message + "</p>";
         }
     }
 
@@ -439,51 +509,76 @@ document.addEventListener('DOMContentLoaded', () => {
         const adminProposalsListEl = document.getElementById('adminProposalsList');
         
         try {
+            console.log("Loading proposals for admin...");
             adminProposalsListEl.innerHTML = "<p>Loading proposals...</p>";
             
             // Similar to loadProposals but filter for ones that can be executed
-            const maxProposalCount = 10;
+            const maxProposalCount = 20;
             let foundProposals = false;
             
             adminProposalsListEl.innerHTML = "";
             
+            console.log("Checking for proposals that can be executed...");
             for (let i = 1; i <= maxProposalCount; i++) {
                 try {
+                    console.log(`Checking proposal ${i}...`);
                     const proposal = await contract.proposals(i);
+                    
+                    // Skip invalid proposals
+                    if (!proposal || !proposal.campaignId) {
+                        console.log(`Proposal ${i} doesn't exist or is invalid`);
+                        continue;
+                    }
+                    
+                    console.log(`Proposal ${i} data:`, proposal);
                     
                     // Only show proposals that are not executed and have more votes for than against
                     if (!proposal.executed && proposal.votesFor.gt(proposal.votesAgainst)) {
+                        console.log(`Proposal ${i} can be executed: ${proposal.votesFor} > ${proposal.votesAgainst}`);
                         foundProposals = true;
                         
                         const proposalCard = document.createElement('div');
                         proposalCard.className = 'proposal-card';
                         
                         proposalCard.innerHTML = `
-                            <h3>Proposal #${proposal.id} (Campaign #${proposal.campaignId})</h3>
-                            <p>${proposal.description}</p>
+                            <h3>Proposal #${i} (Campaign #${proposal.campaignId})</h3>
+                            <p>${proposal.description || "No description available"}</p>
                             <p>Amount: ${ethers.utils.formatEther(proposal.amount)} ETH</p>
-                            <p>Votes For: ${proposal.votesFor}</p>
-                            <p>Votes Against: ${proposal.votesAgainst}</p>
-                            <button class="execute-btn" data-id="${proposal.id}">Execute Proposal</button>
+                            <p>Votes For: ${proposal.votesFor.toString()}</p>
+                            <p>Votes Against: ${proposal.votesAgainst.toString()}</p>
+                            <button class="execute-btn" data-id="${i}">Execute Proposal</button>
                         `;
                         
                         adminProposalsListEl.appendChild(proposalCard);
                         
                         // Add event listener for execution
                         const executeBtn = proposalCard.querySelector('.execute-btn');
-                        executeBtn.addEventListener('click', () => executeProposal(proposal.id));
+                        executeBtn.addEventListener('click', () => executeProposal(i));
+                    } else {
+                        // If proposal exists but can't be executed, explain why
+                        if (proposal.executed) {
+                            console.log(`Proposal ${i} already executed`);
+                        } else if (!proposal.votesFor.gt(proposal.votesAgainst)) {
+                            console.log(`Proposal ${i} doesn't have enough votes: ${proposal.votesFor} <= ${proposal.votesAgainst}`);
+                        }
                     }
                 } catch (error) {
-                    console.log(`No proposal at index ${i} or error:`, error);
+                    console.log(`Error checking proposal ${i}:`, error);
                 }
             }
             
             if (!foundProposals) {
-                adminProposalsListEl.innerHTML = "<p>No proposals ready for execution.</p>";
+                adminProposalsListEl.innerHTML = `
+                    <p>No proposals ready for execution.</p>
+                    <p>Proposals need more votes in favor than against to be executed.</p>
+                `;
             }
         } catch (error) {
             console.error("Error loading admin proposals:", error);
-            adminProposalsListEl.innerHTML = "<p>Error loading proposals. Please try again.</p>";
+            adminProposalsListEl.innerHTML = `
+                <p>Error loading proposals. Please try again.</p>
+                <p>Details: ${error.message}</p>
+            `;
         }
     }
 
