@@ -7,6 +7,7 @@ let isRegistered = false;
 
 // Wait for DOM content to load
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log("Application initialized. Please connect your wallet to continue.");
     // Initialize UI event listeners
     initializeUI();
     
@@ -18,17 +19,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Check if already connected
         const accounts = await provider.listAccounts();
         if (accounts.length > 0) {
+            console.log("Found connected accounts:", accounts);
             await connectWallet();
         }
     } else {
-        alert('MetaMask is not installed. Please install it to use this application.');
+        console.error("MetaMask not detected!");
+        alert('MetaMask is not installed. Please install it to use this application: https://metamask.io/download.html');
     }
 });
 
 // Initialize UI event listeners
 function initializeUI() {
+    console.log("Initializing UI and event listeners");
     // Connect wallet button
-    document.getElementById('connectWalletBtn').addEventListener('click', connectWallet);
+    const connectWalletBtn = document.getElementById('connectWalletBtn');
+    if (connectWalletBtn) {
+        connectWalletBtn.addEventListener('click', connectWallet);
+        console.log("Wallet connect button listener added");
+    } else {
+        console.error("Connect wallet button not found in the DOM");
+    }
     
     // Register button
     document.getElementById('registerBtn').addEventListener('click', registerUser);
@@ -74,10 +84,12 @@ function initializeUI() {
 
 // Connect to MetaMask wallet
 async function connectWallet() {
+    console.log("Attempting to connect wallet...");
     try {
         // Request account access
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         currentAccount = accounts[0];
+        console.log("Connected to account:", currentAccount);
         
         // Get the signer
         provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -85,6 +97,7 @@ async function connectWallet() {
         
         // Create contract instance
         lendingContract = new ethers.Contract(lendingPlatformAddress, lendingPlatformABI, signer);
+        console.log("Lending contract instance created");
         
         // Update UI
         document.getElementById('walletAddress').textContent = `${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
@@ -94,6 +107,7 @@ async function connectWallet() {
         // Get balance
         const balance = await provider.getBalance(currentAccount);
         document.getElementById('walletBalance').textContent = `${ethers.utils.formatEther(balance).substring(0, 6)} ETH`;
+        console.log("Wallet balance:", ethers.utils.formatEther(balance), "ETH");
         
         // Check if user is registered
         await checkUserRegistration();
@@ -103,11 +117,12 @@ async function connectWallet() {
         
         // Listen for network changes
         window.ethereum.on('chainChanged', () => {
+            console.log("Network changed, reloading...");
             window.location.reload();
         });
     } catch (error) {
         console.error('Error connecting to wallet:', error);
-        alert('Failed to connect to your wallet. Please try again.');
+        alert('Failed to connect to your wallet. Please make sure MetaMask is unlocked and on the Sepolia testnet. Error: ' + error.message);
     }
 }
 
