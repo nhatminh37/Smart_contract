@@ -4,26 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wallet Connection Test</title>
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
+    <!-- Primary CDN -->
+    <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <!-- Fallback mechanism -->
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof window.ethers === 'undefined') {
+                console.log("Primary ethers.js failed to load, trying fallback...");
+                var fallbackScript = document.createElement('script');
+                fallbackScript.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
+                fallbackScript.onload = function() {
+                    console.log("Fallback ethers.js loaded successfully!");
+                    document.getElementById('results').innerHTML = 
+                        '<p style="color: blue;">Fallback ethers.js loaded successfully!</p>';
+                };
+                fallbackScript.onerror = function() {
+                    console.error("Both primary and fallback ethers.js failed to load.");
+                    document.getElementById('results').innerHTML = 
+                        '<p style="color: red;">Failed to load ethers.js from both sources. Check your internet connection.</p>';
+                };
+                document.head.appendChild(fallbackScript);
+            } else {
+                console.log("Primary ethers.js loaded successfully!");
+                document.getElementById('results').innerHTML = 
+                    '<p style="color: green;">Primary ethers.js loaded successfully!</p>';
+            }
+        });
+    </script>
 </head>
 <body>
     <h1>Wallet Connection Test</h1>
+    <p>Status: <span id="status">Checking libraries...</span></p>
+    <div id="results"></div>
     <button id="testBtn">Test Ethers.js</button>
     <button id="connectBtn">Connect Wallet</button>
-    <div id="results"></div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const resultsDiv = document.getElementById('results');
+            const statusSpan = document.getElementById('status');
             
             // Test ethers.js loading
             document.getElementById('testBtn').addEventListener('click', function() {
                 if (typeof ethers !== 'undefined') {
-                    resultsDiv.innerHTML = '<p style="color: green;">Ethers.js is loaded correctly!</p>';
-                    console.log("Ethers version:", ethers.version);
+                    resultsDiv.innerHTML += '<p style="color: green;">Ethers.js is working! Version: ' + ethers.version + '</p>';
+                    statusSpan.textContent = "Libraries loaded successfully";
+                    statusSpan.style.color = "green";
                 } else {
-                    resultsDiv.innerHTML = '<p style="color: red;">Error: ethers is not defined</p>';
-                    console.error("ethers is not defined");
+                    resultsDiv.innerHTML += '<p style="color: red;">Error: ethers is not defined</p>';
+                    statusSpan.textContent = "Failed to load libraries";
+                    statusSpan.style.color = "red";
                 }
             });
             
@@ -38,18 +68,23 @@
                         const account = accounts[0];
                         resultsDiv.innerHTML += `<p>Connected account: ${account}</p>`;
                         
-                        // Get the provider and signer
-                        const provider = new ethers.providers.Web3Provider(window.ethereum);
-                        const signer = provider.getSigner();
-                        
-                        // Get balance
-                        const balance = await provider.getBalance(account);
-                        const formattedBalance = ethers.utils.formatEther(balance);
-                        resultsDiv.innerHTML += `<p>Account balance: ${formattedBalance} ETH</p>`;
-                        
-                        // Get network
-                        const network = await provider.getNetwork();
-                        resultsDiv.innerHTML += `<p>Connected to network: ${network.name} (Chain ID: ${network.chainId})</p>`;
+                        // Verify ethers is loaded before trying to use it
+                        if (typeof ethers !== 'undefined') {
+                            // Get the provider and signer
+                            const provider = new ethers.providers.Web3Provider(window.ethereum);
+                            const signer = provider.getSigner();
+                            
+                            // Get balance
+                            const balance = await provider.getBalance(account);
+                            const formattedBalance = ethers.utils.formatEther(balance);
+                            resultsDiv.innerHTML += `<p>Account balance: ${formattedBalance} ETH</p>`;
+                            
+                            // Get network
+                            const network = await provider.getNetwork();
+                            resultsDiv.innerHTML += `<p>Connected to network: ${network.name} (Chain ID: ${network.chainId})</p>`;
+                        } else {
+                            resultsDiv.innerHTML += '<p style="color: red;">Error: ethers is not defined, cannot get additional wallet info</p>';
+                        }
                     } else {
                         resultsDiv.innerHTML += '<p style="color: red;">MetaMask is not installed!</p>';
                     }

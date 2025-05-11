@@ -5,16 +5,47 @@ let lendingContract;
 let currentAccount;
 let isRegistered = false;
 
-// Check if ethers is loaded
-console.log("Checking ethers library:", typeof ethers !== 'undefined' ? "Loaded" : "Not loaded");
+// Ensure ethers is loaded before proceeding
+function ensureEthersLoaded(callback) {
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    function checkEthers() {
+        console.log(`Checking for ethers.js (attempt ${attempts + 1}/${maxAttempts})...`);
+        
+        if (typeof window.ethers !== 'undefined') {
+            console.log("ethers.js is available, proceeding...");
+            callback();
+            return;
+        }
+        
+        attempts++;
+        if (attempts >= maxAttempts) {
+            console.error("Failed to load ethers.js after multiple attempts");
+            alert("Could not load the ethers.js library. Please try refreshing the page or check your browser console for more information.");
+            return;
+        }
+        
+        console.log("ethers.js not loaded yet, waiting...");
+        setTimeout(checkEthers, 1000); // Wait 1 second before checking again
+    }
+    
+    checkEthers();
+}
 
 // Wait for DOM content to load
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', function() {
     console.log("DOM content loaded, initializing application...");
     
     // Initialize UI event listeners
     initializeUI();
     
+    // Ensure ethers is loaded before initializing
+    ensureEthersLoaded(initializeWallet);
+});
+
+// Initialize wallet connection
+function initializeWallet() {
     // Check if MetaMask is installed
     if (typeof window.ethereum !== 'undefined') {
         console.log("MetaMask detected");
@@ -24,11 +55,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Web3Provider initialized successfully");
             
             // Check if already connected
-            const accounts = await provider.listAccounts();
-            console.log("Found accounts:", accounts);
-            if (accounts.length > 0) {
-                await connectWallet();
-            }
+            provider.listAccounts().then(accounts => {
+                console.log("Found accounts:", accounts);
+                if (accounts.length > 0) {
+                    connectWallet();
+                }
+            }).catch(error => {
+                console.error("Error checking accounts:", error);
+            });
         } catch (error) {
             console.error("Error initializing provider:", error);
             alert("Error initializing Web3: " + error.message);
@@ -37,7 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error("MetaMask not detected!");
         alert('MetaMask is not installed. Please install it to use this application: https://metamask.io/download.html');
     }
-});
+}
 
 // Initialize UI event listeners
 function initializeUI() {
