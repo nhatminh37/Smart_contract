@@ -62,6 +62,18 @@ async function initializeApp() {
             isRegistered = false;
         }
         
+        // Check if token mode is enabled
+        try {
+            usingTokenMode = await lendingPlatform.usingToken();
+            console.log("Token mode enabled:", usingTokenMode);
+            
+            // Update UI to show which currency is being used
+            updateCurrencyLabels();
+        } catch (error) {
+            console.error("Error checking token mode:", error);
+            usingTokenMode = false;
+        }
+        
         // Update UI based on registration status
         updateUIForRegistration();
         
@@ -80,6 +92,30 @@ async function initializeApp() {
             document.getElementById('walletAddress').textContent = `${userAddress.substring(0, 6)}...${userAddress.substring(38)}`;
         }
         
+        // If token mode is enabled, also show token balance
+        if (usingTokenMode) {
+            try {
+                const tokenBalance = await loanToken.balanceOf(userAddress);
+                const tokenSymbol = await loanToken.symbol();
+                
+                if (document.getElementById('tokenBalance')) {
+                    document.getElementById('tokenBalance').textContent = `${ethers.utils.formatEther(tokenBalance)} ${tokenSymbol}`;
+                    document.getElementById('tokenInfo').style.display = 'block';
+                } else {
+                    // Create token balance display if it doesn't exist
+                    const walletInfo = document.getElementById('walletInfo');
+                    if (walletInfo) {
+                        const tokenInfo = document.createElement('p');
+                        tokenInfo.id = 'tokenInfo';
+                        tokenInfo.innerHTML = `Token Balance: <span id="tokenBalance">${ethers.utils.formatEther(tokenBalance)} ${tokenSymbol}</span>`;
+                        walletInfo.appendChild(tokenInfo);
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading token balance:", error);
+            }
+        }
+        
         // If user is registered, display reputation and attempt to load requests
         if (isRegistered) {
             displayUserReputation();
@@ -96,6 +132,29 @@ async function initializeApp() {
     } catch (error) {
         console.error("Initialization error:", error);
         document.getElementById('status').textContent = `Error: ${error.message}`;
+    }
+}
+
+// Update currency labels based on token mode
+function updateCurrencyLabels() {
+    const currencyLabels = document.querySelectorAll('.currency-label');
+    const tokenSymbol = usingTokenMode ? 'P2PLT' : 'ETH';
+    
+    // Update all elements with currency-label class
+    currencyLabels.forEach(label => {
+        label.textContent = tokenSymbol;
+    });
+    
+    // Update specific form labels
+    const loanAmountLabel = document.querySelector('label[for="loanAmount"]');
+    if (loanAmountLabel) {
+        loanAmountLabel.textContent = `Loan Amount (${tokenSymbol})`;
+    }
+    
+    // Collateral is always in ETH
+    const collateralLabel = document.querySelector('label[for="collateralAmount"]');
+    if (collateralLabel) {
+        collateralLabel.textContent = 'Collateral Amount (ETH)';
     }
 }
 
@@ -298,16 +357,43 @@ async function createLoanRequest() {
         
         document.getElementById('status').textContent = "Creating loan request...";
         
-        const tx = await lendingPlatform.createLoanRequest(
-            amount,
-            durationDays,
-            maxInterestRate,
-            purpose,
-            { value: collateral }
-        );
+        let tx;
+        
+        if (usingTokenMode) {
+            // First approve the LendingPlatform contract to spend tokens
+            document.getElementById('status').textContent = "Approving token transfer...";
+            const approveTx = await loanToken.approve(LENDING_PLATFORM_ADDRESS, amount);
+            await approveTx.wait();
+            
+            // Then create the loan request
+            document.getElementById('status').textContent = "Creating loan request...";
+            tx = await lendingPlatform.createLoanRequest(
+                amount,
+                durationDays,
+                maxInterestRate,
+                purpose,
+                { value: collateral }
+            );
+        } else {
+            // If not using token mode, just create the loan request directly
+            tx = await lendingPlatform.createLoanRequest(
+                amount,
+                durationDays,
+                maxInterestRate,
+                purpose,
+                { value: collateral }
+            );
+        }
         
         await tx.wait();
         document.getElementById('status').textContent = "Loan request created successfully!";
+        
+        // Clear form
+        loanAmountInput.value = '';
+        loanDurationInput.value = '';
+        maxInterestRateInput.value = '';
+        purposeInput.value = '';
+        collateralInput.value = '';
         
         // Reload loan requests
         loadActiveLoanRequests();
