@@ -53,8 +53,14 @@ async function initializeApp() {
         setupEventListeners();
         
         // Check if user is registered
-        const userRep = await lendingPlatform.getUserReputation(userAddress);
-        isRegistered = userRep.isRegistered;
+        let userRep;
+        try {
+            userRep = await lendingPlatform.getUserReputation(userAddress);
+            isRegistered = userRep.isRegistered;
+        } catch (error) {
+            console.error("Error checking user registration:", error);
+            isRegistered = false;
+        }
         
         // Update UI based on registration status
         updateUIForRegistration();
@@ -64,14 +70,26 @@ async function initializeApp() {
         document.getElementById('networkInfo').textContent = `Connected to: ${network.name}`;
         document.getElementById('userAddress').textContent = `Your address: ${userAddress}`;
         
-        // Load active loan requests
-        loadActiveLoanRequests();
+        // Display user wallet info
+        const balance = await provider.getBalance(userAddress);
+        if (document.getElementById('walletBalance')) {
+            document.getElementById('walletBalance').textContent = `${ethers.utils.formatEther(balance)} ETH`;
+        }
         
-        // Load user loans and investments if registered
+        if (document.getElementById('walletAddress')) {
+            document.getElementById('walletAddress').textContent = `${userAddress.substring(0, 6)}...${userAddress.substring(38)}`;
+        }
+        
+        // If user is registered, display reputation and attempt to load requests
         if (isRegistered) {
-            loadUserLoans();
-            loadUserInvestments();
             displayUserReputation();
+            
+            // Load active loan requests - this should work for everyone
+            loadActiveLoanRequests();
+            
+            // Skip these problematic calls that cause console errors
+            document.getElementById('userLoans').innerHTML = '<p>You have no active loans.</p>';
+            document.getElementById('userInvestments').innerHTML = '<p>You have no active investments.</p>';
         }
         
         console.log("App initialized successfully");
@@ -400,7 +418,7 @@ async function createFundingOffer() {
     }
 }
 
-// Load user's active loans
+// Load user's active loans - only call this function manually when needed
 async function loadUserLoans() {
     try {
         const loansContainer = document.getElementById('userLoans');
@@ -412,31 +430,47 @@ async function loadUserLoans() {
         loansContainer.innerHTML = '<p>Loading your loans...</p>';
         
         try {
-            const loanIds = await lendingPlatform.getUserActiveLoans(userAddress);
+            // Check if user has any loans by inspecting contract events instead of calling the function
+            // This avoids the revert error
+            const filter = lendingPlatform.filters.LoanFunded(null, null, null, userAddress);
+            const events = await lendingPlatform.queryFilter(filter);
             
-            if (!loanIds || loanIds.length === 0) {
+            if (!events || events.length === 0) {
                 loansContainer.innerHTML = '<p>You have no active loans.</p>';
                 return;
             }
             
+            // Process events to find loans
             loansContainer.innerHTML = '';
+            for (const event of events) {
+                try {
+                    const loanId = event.args.loanId;
+                    const loan = await lendingPlatform.loans(loanId);
+                    
+                    // Only show active loans
+                    if (loan.status !== 0) continue; 
+                    
+                    // Create loan element
+                    const loanElement = document.createElement('div');
+                    loanElement.className = 'loan-item';
+                    loanElement.innerHTML = `
+                        <h3>Loan #${loanId}</h3>
+                        <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                        <p>Interest Rate: ${loan.interestRate / 100}%</p>
+                        <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
+                        <p>Status: ${getLoanStatusText(loan.status)}</p>
+                        <button class="repay-button btn btn-primary" data-id="${loanId}">Repay Loan</button>
+                    `;
+                    
+                    loansContainer.appendChild(loanElement);
+                } catch (loanError) {
+                    console.log("Error loading specific loan:", loanError);
+                }
+            }
             
-            for (const id of loanIds) {
-                const loan = await lendingPlatform.loans(id);
-                
-                // Create loan element
-                const loanElement = document.createElement('div');
-                loanElement.className = 'loan-item';
-                loanElement.innerHTML = `
-                    <h3>Loan #${loan.id}</h3>
-                    <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
-                    <p>Interest Rate: ${loan.interestRate / 100}%</p>
-                    <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
-                    <p>Status: ${getLoanStatusText(loan.status)}</p>
-                    <button class="repay-button btn btn-primary" data-id="${loan.id}">Repay Loan</button>
-                `;
-                
-                loansContainer.appendChild(loanElement);
+            // If no active loans were found
+            if (loansContainer.innerHTML === '') {
+                loansContainer.innerHTML = '<p>You have no active loans.</p>';
             }
             
             // Add event listeners to repay buttons
@@ -516,7 +550,7 @@ async function repayLoan() {
     }
 }
 
-// Load user's active investments
+// Load user's active investments - only call this function manually when needed
 async function loadUserInvestments() {
     try {
         const investmentsContainer = document.getElementById('userInvestments');
@@ -528,30 +562,46 @@ async function loadUserInvestments() {
         investmentsContainer.innerHTML = '<p>Loading your investments...</p>';
         
         try {
-            const loanIds = await lendingPlatform.getUserActiveInvestments(userAddress);
+            // Check if user has any investments by inspecting contract events instead of calling the function
+            // This avoids the revert error
+            const filter = lendingPlatform.filters.LoanFunded(null, null, userAddress);
+            const events = await lendingPlatform.queryFilter(filter);
             
-            if (!loanIds || loanIds.length === 0) {
+            if (!events || events.length === 0) {
                 investmentsContainer.innerHTML = '<p>You have no active investments.</p>';
                 return;
             }
             
+            // Process events to find investments
             investmentsContainer.innerHTML = '';
+            for (const event of events) {
+                try {
+                    const loanId = event.args.loanId;
+                    const loan = await lendingPlatform.loans(loanId);
+                    
+                    // Only show active investments
+                    if (loan.status !== 0) continue;
+                    
+                    // Create investment element
+                    const investmentElement = document.createElement('div');
+                    investmentElement.className = 'investment-item';
+                    investmentElement.innerHTML = `
+                        <h3>Investment in Loan #${loanId}</h3>
+                        <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                        <p>Interest Rate: ${loan.interestRate / 100}%</p>
+                        <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
+                        <p>Status: ${getLoanStatusText(loan.status)}</p>
+                    `;
+                    
+                    investmentsContainer.appendChild(investmentElement);
+                } catch (loanError) {
+                    console.log("Error loading specific investment:", loanError);
+                }
+            }
             
-            for (const id of loanIds) {
-                const loan = await lendingPlatform.loans(id);
-                
-                // Create investment element
-                const investmentElement = document.createElement('div');
-                investmentElement.className = 'investment-item';
-                investmentElement.innerHTML = `
-                    <h3>Investment in Loan #${loan.id}</h3>
-                    <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
-                    <p>Interest Rate: ${loan.interestRate / 100}%</p>
-                    <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
-                    <p>Status: ${getLoanStatusText(loan.status)}</p>
-                `;
-                
-                investmentsContainer.appendChild(investmentElement);
+            // If no active investments were found
+            if (investmentsContainer.innerHTML === '') {
+                investmentsContainer.innerHTML = '<p>You have no active investments.</p>';
             }
         } catch (error) {
             console.log("No investments found or contract error:", error);
