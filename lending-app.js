@@ -1,9 +1,15 @@
 // Global variables
+import { LENDING_PLATFORM_ADDRESS, LOAN_TOKEN_ADDRESS, LENDING_PLATFORM_ABI, LOAN_TOKEN_ABI } from './lending-abi.js';
 let provider;
 let signer;
-let lendingContract;
-let currentAccount;
+let lendingPlatform;
+let loanToken;
+let userAddress;
 let isRegistered = false;
+let isAdmin = false;
+let usingTokenMode = false;
+let currentPage = 0;
+let itemsPerPage = 5;
 
 // Ensure ethers is loaded before proceeding
 function ensureEthersLoaded(callback) {
@@ -41,36 +47,350 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeUI();
     
     // Ensure ethers is loaded before initializing
-    ensureEthersLoaded(initializeWallet);
+    ensureEthersLoaded(initializeApp);
 });
 
 // Initialize wallet connection
-function initializeWallet() {
-    // Check if MetaMask is installed
-    if (typeof window.ethereum !== 'undefined') {
-        console.log("MetaMask detected");
-        try {
-            // Initialize provider
+async function initializeApp() {
+    try {
+        // Connect to MetaMask
+        if (window.ethereum) {
             provider = new ethers.providers.Web3Provider(window.ethereum);
-            console.log("Web3Provider initialized successfully");
             
-            // Check if already connected
-            provider.listAccounts().then(accounts => {
-                console.log("Found accounts:", accounts);
-                if (accounts.length > 0) {
-                    connectWallet();
-                }
-            }).catch(error => {
-                console.error("Error checking accounts:", error);
-            });
-        } catch (error) {
-            console.error("Error initializing provider:", error);
-            alert("Error initializing Web3: " + error.message);
+            // Request account access if needed
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            
+            signer = provider.getSigner();
+            userAddress = await signer.getAddress();
+            
+            // Initialize contract instances
+            lendingPlatform = new ethers.Contract(
+                LENDING_PLATFORM_ADDRESS,
+                LENDING_PLATFORM_ABI,
+                signer
+            );
+            
+            loanToken = new ethers.Contract(
+                LOAN_TOKEN_ADDRESS,
+                LOAN_TOKEN_ABI,
+                signer
+            );
+            
+            // Check if user is registered
+            const userRep = await lendingPlatform.getUserReputation(userAddress);
+            isRegistered = userRep.isRegistered;
+            
+            // Update UI based on registration status
+            updateUIForRegistration();
+            
+            // Load active loan requests
+            loadActiveLoanRequests();
+            
+            // Load user loans and investments if registered
+            if (isRegistered) {
+                loadUserLoans();
+                loadUserInvestments();
+                displayUserReputation();
+            }
+            
+            // Setup event listeners for the UI
+            setupEventListeners();
+            
+            // Display network info
+            const network = await provider.getNetwork();
+            document.getElementById('networkInfo').textContent = `Connected to: ${network.name}`;
+            document.getElementById('userAddress').textContent = `Your address: ${userAddress}`;
+            
+            console.log("App initialized successfully");
+        } else {
+            console.error("Please install MetaMask to use this dApp");
+            document.getElementById('status').textContent = "Please install MetaMask to use this dApp";
         }
-    } else {
-        console.error("MetaMask not detected!");
-        alert('MetaMask is not installed. Please install it to use this application: https://metamask.io/download.html');
+    } catch (error) {
+        console.error("Initialization error:", error);
+        document.getElementById('status').textContent = `Error: ${error.message}`;
     }
+}
+
+// Update UI based on registration status
+function updateUIForRegistration() {
+    if (isRegistered) {
+        document.getElementById('registrationSection').style.display = 'none';
+        document.getElementById('loanRequestForm').style.display = 'block';
+        document.getElementById('status').textContent = "You are registered on the platform";
+    } else {
+        document.getElementById('registrationSection').style.display = 'block';
+        document.getElementById('loanRequestForm').style.display = 'none';
+        document.getElementById('status').textContent = "Please register to use the platform";
+    }
+}
+
+// Register user on the platform
+async function registerUser() {
+    try {
+        document.getElementById('status').textContent = "Registering user...";
+        const tx = await lendingPlatform.registerUser();
+        await tx.wait();
+        
+        isRegistered = true;
+        updateUIForRegistration();
+        displayUserReputation();
+        
+        document.getElementById('status').textContent = "Registration successful!";
+    } catch (error) {
+        console.error("Registration error:", error);
+        document.getElementById('status').textContent = `Registration failed: ${error.message}`;
+    }
+}
+
+// Create a new loan request
+async function createLoanRequest() {
+    try {
+        const amount = ethers.utils.parseEther(document.getElementById('loanAmount').value);
+        const durationDays = parseInt(document.getElementById('loanDuration').value);
+        const maxInterestRate = parseInt(document.getElementById('maxInterestRate').value) * 100; // Convert to basis points
+        const purpose = document.getElementById('loanPurpose').value;
+        const collateral = ethers.utils.parseEther(document.getElementById('collateralAmount').value);
+        
+        document.getElementById('status').textContent = "Creating loan request...";
+        
+        const tx = await lendingPlatform.createLoanRequest(
+            amount,
+            durationDays,
+            maxInterestRate,
+            purpose,
+            { value: collateral }
+        );
+        
+        await tx.wait();
+        document.getElementById('status').textContent = "Loan request created successfully!";
+        
+        // Reload loan requests
+        loadActiveLoanRequests();
+    } catch (error) {
+        console.error("Loan request error:", error);
+        document.getElementById('status').textContent = `Loan request failed: ${error.message}`;
+    }
+}
+
+// Load active loan requests
+async function loadActiveLoanRequests() {
+    try {
+        const requestIds = await lendingPlatform.getActiveLoanRequests(0, 20);
+        const requestsContainer = document.getElementById('loanRequests');
+        requestsContainer.innerHTML = '';
+        
+        for (const id of requestIds) {
+            const request = await lendingPlatform.loanRequests(id);
+            
+            // Create request element
+            const requestElement = document.createElement('div');
+            requestElement.className = 'loan-request';
+            requestElement.innerHTML = `
+                <h3>Loan Request #${request.id}</h3>
+                <p>Amount: ${ethers.utils.formatEther(request.amount)} ETH</p>
+                <p>Duration: ${request.durationDays} days</p>
+                <p>Max Interest: ${request.maxInterestRate / 100}%</p>
+                <p>Collateral: ${ethers.utils.formatEther(request.collateralAmount)} ETH</p>
+                <p>Purpose: ${request.purpose}</p>
+                <button class="fund-button" data-id="${request.id}">Fund This Loan</button>
+            `;
+            
+            requestsContainer.appendChild(requestElement);
+        }
+        
+        // Add event listeners to fund buttons
+        const fundButtons = document.querySelectorAll('.fund-button');
+        fundButtons.forEach(button => {
+            button.addEventListener('click', (event) => {
+                const requestId = event.target.getAttribute('data-id');
+                showFundingDialog(requestId);
+            });
+        });
+    } catch (error) {
+        console.error("Error loading loan requests:", error);
+        document.getElementById('status').textContent = `Error loading loan requests: ${error.message}`;
+    }
+}
+
+// Show funding dialog
+function showFundingDialog(requestId) {
+    document.getElementById('fundRequestId').value = requestId;
+    document.getElementById('fundingDialog').style.display = 'block';
+}
+
+// Submit funding offer
+async function createFundingOffer() {
+    try {
+        const requestId = document.getElementById('fundRequestId').value;
+        const interestRate = parseInt(document.getElementById('offerInterestRate').value) * 100; // Convert to basis points
+        
+        document.getElementById('status').textContent = "Creating funding offer...";
+        
+        const tx = await lendingPlatform.createFundingOffer(requestId, interestRate);
+        await tx.wait();
+        
+        document.getElementById('fundingDialog').style.display = 'none';
+        document.getElementById('status').textContent = "Funding offer created successfully!";
+        
+        // Reload funding offers for this request
+        loadFundingOffers(requestId);
+    } catch (error) {
+        console.error("Funding offer error:", error);
+        document.getElementById('status').textContent = `Funding offer failed: ${error.message}`;
+    }
+}
+
+// Load user's active loans
+async function loadUserLoans() {
+    try {
+        const loanIds = await lendingPlatform.getUserActiveLoans(userAddress);
+        const loansContainer = document.getElementById('userLoans');
+        loansContainer.innerHTML = '';
+        
+        for (const id of loanIds) {
+            const loan = await lendingPlatform.loans(id);
+            
+            // Create loan element
+            const loanElement = document.createElement('div');
+            loanElement.className = 'loan-item';
+            loanElement.innerHTML = `
+                <h3>Loan #${loan.id}</h3>
+                <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                <p>Interest Rate: ${loan.interestRate / 100}%</p>
+                <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
+                <p>Status: ${getLoanStatusText(loan.status)}</p>
+                <button class="repay-button" data-id="${loan.id}">Repay Loan</button>
+            `;
+            
+            loansContainer.appendChild(loanElement);
+        }
+        
+        // Add event listeners to repay buttons
+        const repayButtons = document.querySelectorAll('.repay-button');
+        repayButtons.forEach(button => {
+            button.addEventListener('click', (event) => {
+                const loanId = event.target.getAttribute('data-id');
+                showRepayDialog(loanId);
+            });
+        });
+    } catch (error) {
+        console.error("Error loading user loans:", error);
+    }
+}
+
+// Get text representation of loan status
+function getLoanStatusText(statusCode) {
+    const statuses = ["Active", "Repaid", "Defaulted"];
+    return statuses[statusCode] || "Unknown";
+}
+
+// Show repay dialog
+function showRepayDialog(loanId) {
+    document.getElementById('repayLoanId').value = loanId;
+    document.getElementById('repayDialog').style.display = 'block';
+}
+
+// Repay loan
+async function repayLoan() {
+    try {
+        const loanId = document.getElementById('repayLoanId').value;
+        const loan = await lendingPlatform.loans(loanId);
+        
+        // Calculate total repayment amount (principal + interest)
+        const principal = loan.amount;
+        const interestAmount = principal.mul(loan.interestRate).div(10000); // Interest rate is in basis points (100 = 1%)
+        const totalRepayment = principal.add(interestAmount);
+        
+        document.getElementById('status').textContent = "Repaying loan...";
+        
+        const tx = await lendingPlatform.repayLoan(loanId, { value: totalRepayment });
+        await tx.wait();
+        
+        document.getElementById('repayDialog').style.display = 'none';
+        document.getElementById('status').textContent = "Loan repaid successfully!";
+        
+        // Reload user loans
+        loadUserLoans();
+        displayUserReputation();
+    } catch (error) {
+        console.error("Loan repayment error:", error);
+        document.getElementById('status').textContent = `Loan repayment failed: ${error.message}`;
+    }
+}
+
+// Load user's active investments
+async function loadUserInvestments() {
+    try {
+        const loanIds = await lendingPlatform.getUserActiveInvestments(userAddress);
+        const investmentsContainer = document.getElementById('userInvestments');
+        investmentsContainer.innerHTML = '';
+        
+        for (const id of loanIds) {
+            const loan = await lendingPlatform.loans(id);
+            
+            // Create investment element
+            const investmentElement = document.createElement('div');
+            investmentElement.className = 'investment-item';
+            investmentElement.innerHTML = `
+                <h3>Investment in Loan #${loan.id}</h3>
+                <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                <p>Interest Rate: ${loan.interestRate / 100}%</p>
+                <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
+                <p>Status: ${getLoanStatusText(loan.status)}</p>
+            `;
+            
+            investmentsContainer.appendChild(investmentElement);
+        }
+    } catch (error) {
+        console.error("Error loading user investments:", error);
+    }
+}
+
+// Display user reputation
+async function displayUserReputation() {
+    try {
+        const userRep = await lendingPlatform.getUserReputation(userAddress);
+        const reputationContainer = document.getElementById('userReputation');
+        
+        reputationContainer.innerHTML = `
+            <h3>Your Reputation</h3>
+            <p>Reputation Score: ${userRep.reputationScore}</p>
+            <p>Loans Requested: ${userRep.totalLoansRequested}</p>
+            <p>Loans Funded: ${userRep.totalLoansFunded}</p>
+            <p>Loans Repaid On Time: ${userRep.loansRepaidOnTime}</p>
+            <p>Defaulted Loans: ${userRep.loansDefaulted}</p>
+            <p>Total Transactions: ${userRep.totalTransactions}</p>
+            <p>Collateralization Ratio: ${userRep.collateralizationRatio / 100}%</p>
+        `;
+    } catch (error) {
+        console.error("Error loading user reputation:", error);
+    }
+}
+
+// Setup event listeners
+function setupEventListeners() {
+    // Register user
+    document.getElementById('registerButton').addEventListener('click', registerUser);
+    
+    // Create loan request
+    document.getElementById('submitLoanRequest').addEventListener('click', createLoanRequest);
+    
+    // Close funding dialog
+    document.getElementById('closeFundingDialog').addEventListener('click', () => {
+        document.getElementById('fundingDialog').style.display = 'none';
+    });
+    
+    // Submit funding offer
+    document.getElementById('submitFunding').addEventListener('click', createFundingOffer);
+    
+    // Close repay dialog
+    document.getElementById('closeRepayDialog').addEventListener('click', () => {
+        document.getElementById('repayDialog').style.display = 'none';
+    });
+    
+    // Submit loan repayment
+    document.getElementById('submitRepayment').addEventListener('click', repayLoan);
 }
 
 // Initialize UI event listeners
@@ -108,6 +428,15 @@ function initializeUI() {
         await repayLoan();
     });
     
+    // Admin panel buttons
+    document.getElementById('updateSettingsBtn').addEventListener('click', updatePlatformSettings);
+    document.getElementById('updateTokenModeBtn').addEventListener('click', updateTokenMode);
+    document.getElementById('withdrawFeesBtn').addEventListener('click', withdrawPlatformFees);
+    
+    // Sort and refresh loan requests
+    document.getElementById('sortRequests').addEventListener('change', () => loadActiveLoanRequests());
+    document.getElementById('refreshRequests').addEventListener('click', () => loadActiveLoanRequests());
+    
     // Close buttons for modals
     document.querySelectorAll('.close, .close-modal').forEach(element => {
         element.addEventListener('click', () => {
@@ -133,24 +462,24 @@ async function connectWallet() {
     try {
         // Request account access
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        currentAccount = accounts[0];
-        console.log("Connected to account:", currentAccount);
+        userAddress = accounts[0];
+        console.log("Connected to account:", userAddress);
         
         // Get the signer
         provider = new ethers.providers.Web3Provider(window.ethereum);
         signer = provider.getSigner();
         
         // Create contract instance
-        lendingContract = new ethers.Contract(lendingPlatformAddress, lendingPlatformABI, signer);
+        lendingPlatform = new ethers.Contract(LENDING_PLATFORM_ADDRESS, LENDING_PLATFORM_ABI, signer);
         console.log("Lending contract instance created");
         
         // Update UI
-        document.getElementById('walletAddress').textContent = `${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+        document.getElementById('walletAddress').textContent = `${userAddress.substring(0, 6)}...${userAddress.substring(38)}`;
         document.getElementById('connectWalletBtn').style.display = 'none';
         document.getElementById('walletInfo').style.display = 'block';
         
         // Get balance
-        const balance = await provider.getBalance(currentAccount);
+        const balance = await provider.getBalance(userAddress);
         document.getElementById('walletBalance').textContent = `${ethers.utils.formatEther(balance).substring(0, 6)} ETH`;
         console.log("Wallet balance:", ethers.utils.formatEther(balance), "ETH");
         
@@ -177,8 +506,8 @@ function handleAccountsChanged(accounts) {
         // MetaMask is locked or the user has not connected any accounts
         alert('Please connect to MetaMask.');
         resetUI();
-    } else if (accounts[0] !== currentAccount) {
-        currentAccount = accounts[0];
+    } else if (accounts[0] !== userAddress) {
+        userAddress = accounts[0];
         // Reload the page to refresh the UI with the new account
         window.location.reload();
     }
@@ -188,19 +517,29 @@ function handleAccountsChanged(accounts) {
 function resetUI() {
     document.getElementById('connectWalletBtn').style.display = 'block';
     document.getElementById('walletInfo').style.display = 'none';
-    document.getElementById('registerSection').style.display = 'none';
+    document.getElementById('registrationSection').style.display = 'none';
     document.getElementById('platformSection').style.display = 'none';
 }
 
 // Check if user is registered
 async function checkUserRegistration() {
     try {
-        const userRep = await lendingContract.getUserReputation(currentAccount);
+        const userRep = await lendingPlatform.getUserReputation(userAddress);
         isRegistered = userRep.isRegistered;
+        
+        // Check if user is admin
+        const adminAddress = await lendingPlatform.adminAddress();
+        isAdmin = (userAddress.toLowerCase() === adminAddress.toLowerCase());
+        
+        // Check if token mode is enabled
+        usingTokenMode = await lendingPlatform.usingToken();
+        
+        // Update UI based on admin status
+        document.getElementById('adminTab').style.display = isAdmin ? 'block' : 'none';
         
         if (isRegistered) {
             // Show platform UI
-            document.getElementById('registerSection').style.display = 'none';
+            document.getElementById('registrationSection').style.display = 'none';
             document.getElementById('platformSection').style.display = 'block';
             
             // Load user data
@@ -208,9 +547,14 @@ async function checkUserRegistration() {
             await loadActiveLoanRequests();
             await loadUserLoans();
             await loadUserInvestments();
+            
+            // Load admin data if admin
+            if (isAdmin) {
+                await loadAdminData();
+            }
         } else {
             // Show registration UI
-            document.getElementById('registerSection').style.display = 'block';
+            document.getElementById('registrationSection').style.display = 'block';
             document.getElementById('platformSection').style.display = 'none';
         }
     } catch (error) {
@@ -218,34 +562,10 @@ async function checkUserRegistration() {
     }
 }
 
-// Register user
-async function registerUser() {
-    try {
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        const tx = await lendingContract.registerUser();
-        await tx.wait();
-        
-        isRegistered = true;
-        document.getElementById('registerSection').style.display = 'none';
-        document.getElementById('platformSection').style.display = 'block';
-        
-        // Load initial data
-        await loadUserDashboard();
-        await loadActiveLoanRequests();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error registering user:', error);
-        alert('Failed to register. Please try again.');
-    }
-}
-
 // Load user dashboard data
 async function loadUserDashboard() {
     try {
-        const userRep = await lendingContract.getUserReputation(currentAccount);
+        const userRep = await lendingPlatform.getUserReputation(userAddress);
         
         // Update reputation score
         const reputationScore = userRep.reputationScore.toNumber();
@@ -267,718 +587,130 @@ async function loadUserDashboard() {
     }
 }
 
-// Load active loan requests with improved UI for competitive funding
-async function loadActiveLoanRequests() {
+// Load admin data
+async function loadAdminData() {
     try {
-        const container = document.getElementById('activeLoanRequestsContainer');
-        container.innerHTML = '<p>Loading loan requests...</p>';
+        // Get platform settings
+        const baseRate = await lendingPlatform.platformBaseRate();
+        const baseRateFormatted = baseRate.toNumber() / 100;
+        document.getElementById('platformBaseRate').value = baseRateFormatted;
         
-        // Get active loan requests (first 10)
-        const requestIds = await lendingContract.getActiveLoanRequests(0, 10);
+        const feePercent = await lendingPlatform.platformFeePercent();
+        const feePercentFormatted = feePercent.toNumber() / 100;
+        document.getElementById('platformFeePercent').value = feePercentFormatted;
         
-        if (requestIds.length === 0) {
-            container.innerHTML = '<p>No active loan requests found.</p>';
-            return;
+        // Get token mode status
+        const usingToken = await lendingPlatform.usingToken();
+        document.getElementById('usingTokenMode').checked = usingToken;
+        
+        if (usingToken) {
+            const tokenAddress = await lendingPlatform.loanToken();
+            document.getElementById('tokenAddress').value = tokenAddress;
         }
         
-        // Clear container
-        container.innerHTML = '';
+        // Get platform statistics
+        const stats = await lendingPlatform.getPlatformStats();
         
-        // Create a card for each request
-        for (const id of requestIds) {
-            const request = await lendingContract.loanRequests(id);
-            
-            // Skip if not active
-            if (request.status !== 0) continue;
-            
-            // Check if expired
-            const isExpired = await lendingContract.checkLoanRequestExpiry(id);
-            if (isExpired) continue;
-            
-            // Calculate collateralization ratio and class
-            const collateralRatio = (Number(ethers.utils.formatEther(request.collateralAmount)) / Number(ethers.utils.formatEther(request.amount))) * 100;
-            let collateralClass = 'low-collateral';
-            if (collateralRatio >= 150) {
-                collateralClass = 'high-collateral';
-            } else if (collateralRatio >= 100) {
-                collateralClass = 'medium-collateral';
+        document.getElementById('adminTotalRequestsStat').textContent = stats.totalLoanRequests.toString();
+        document.getElementById('adminTotalLoansStat').textContent = stats.totalFundedLoans.toString();
+        document.getElementById('adminCurrentFeeStat').textContent = `${stats.currentPlatformFee.toNumber() / 100}%`;
+        document.getElementById('adminCollectedFeesStat').textContent = `${ethers.utils.formatEther(stats.platformFeesCollected)} ETH`;
+    } catch (error) {
+        console.error('Error loading admin data:', error);
+    }
+}
+
+// Update platform settings
+async function updatePlatformSettings() {
+    try {
+        document.getElementById('loadingSpinner').style.display = 'block';
+        
+        const baseRate = parseFloat(document.getElementById('platformBaseRate').value);
+        const baseRateBasis = Math.floor(baseRate * 100);
+        
+        const feePercent = parseFloat(document.getElementById('platformFeePercent').value);
+        const feePercentBasis = Math.floor(feePercent * 100);
+        
+        // Update base rate
+        let tx = await lendingPlatform.updatePlatformBaseRate(baseRateBasis);
+        await tx.wait();
+        
+        // Update fee percent
+        tx = await lendingPlatform.updatePlatformFee(feePercentBasis);
+        await tx.wait();
+        
+        // Reload admin data
+        await loadAdminData();
+        
+        document.getElementById('loadingSpinner').style.display = 'none';
+        alert('Platform settings updated successfully!');
+    } catch (error) {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        console.error('Error updating platform settings:', error);
+        alert('Failed to update platform settings. ' + error.message);
+    }
+}
+
+// Update token mode
+async function updateTokenMode() {
+    try {
+        document.getElementById('loadingSpinner').style.display = 'block';
+        
+        const enableToken = document.getElementById('usingTokenMode').checked;
+        const tokenAddress = document.getElementById('tokenAddress').value;
+        
+        if (enableToken) {
+            // Validate address
+            if (!ethers.utils.isAddress(tokenAddress)) {
+                alert('Please enter a valid token address');
+                document.getElementById('loadingSpinner').style.display = 'none';
+                return;
             }
             
-            // Format creation date
-            const creationDate = new Date(request.timestamp.toNumber() * 1000).toLocaleDateString();
+            // Enable token mode
+            const tx = await lendingPlatform.enableTokenMode(tokenAddress);
+            await tx.wait();
             
-            // Get current best offer information
-            let bestOfferInfo = "No offers yet";
-            let canCreateOffer = true;
-            
-            if (request.bestOfferId.toNumber() > 0) {
-                const bestOffer = await lendingContract.fundingOffers(request.bestOfferId);
-                if (bestOffer.status === 0) { // Active
-                    const bestRate = bestOffer.interestRate.toNumber() / 100;
-                    bestOfferInfo = `<span class="best-offer">Best Rate: ${bestRate}% APR</span>`;
-                    
-                    // Check if current user is the best offer
-                    if (bestOffer.lender.toLowerCase() === currentAccount.toLowerCase()) {
-                        bestOfferInfo += ' (Your offer)';
-                        canCreateOffer = false;
-                    }
-                }
-            }
-            
-            // Get recommended interest rate based on borrower's reputation
-            const recommendedRate = await lendingContract.getRecommendedInterestRate(request.borrower);
-            const recommendedRateFormatted = recommendedRate.toNumber() / 100;
-            
-            // Create card
-            const cardHtml = `
-                <div class="loan-request-card" data-id="${id}">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h3>${request.purpose}</h3>
-                            <p>Requested by: ${request.borrower.substring(0, 6)}...${request.borrower.substring(38)}</p>
-                            <p>Created on: ${creationDate}</p>
-                            <p>Duration: ${request.durationDays.toString()} days</p>
-                            <p>${bestOfferInfo}</p>
-                        </div>
-                        <div class="col-md-4 text-right">
-                            <div class="interest-rate">Max: ${request.maxInterestRate.toNumber() / 100}% APR</div>
-                            <p>Amount: ${ethers.utils.formatEther(request.amount)} ETH</p>
-                            <span class="collateral-ratio ${collateralClass}">
-                                ${collateralRatio.toFixed(0)}% Collateral
-                            </span>
-                        </div>
-                    </div>
-                    <div class="row mt-3">
-                        <div class="col-md-12">
-                            <button class="btn-primary view-loan-btn" data-id="${id}">View Details</button>
-                            ${request.borrower.toLowerCase() !== currentAccount.toLowerCase() ? 
-                                (canCreateOffer ? 
-                                `<button class="btn-primary make-offer-btn" data-id="${id}" 
-                                  data-max="${request.maxInterestRate.toNumber() / 100}" 
-                                  data-recommended="${recommendedRateFormatted}">
-                                    Make Offer
-                                </button>` : 
-                                `<button class="btn-warning view-offers-btn" data-id="${id}">View My Offer</button>`) : 
-                                `<button class="btn-danger cancel-loan-btn" data-id="${id}">Cancel Request</button>`
-                            }
-                            ${request.borrower.toLowerCase() === currentAccount.toLowerCase() && request.bestOfferId.toNumber() > 0 ? 
-                                `<button class="btn-success view-offers-btn" data-id="${id}">View Offers</button>` : 
-                                ''
-                            }
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            container.innerHTML += cardHtml;
-        }
-        
-        // Add event listeners for buttons
-        document.querySelectorAll('.view-loan-btn').forEach(btn => {
-            btn.addEventListener('click', () => viewLoanDetails(btn.getAttribute('data-id')));
-        });
-        
-        document.querySelectorAll('.make-offer-btn').forEach(btn => {
-            btn.addEventListener('click', () => showMakeOfferForm(
-                btn.getAttribute('data-id'), 
-                btn.getAttribute('data-max'),
-                btn.getAttribute('data-recommended')
-            ));
-        });
-        
-        document.querySelectorAll('.view-offers-btn').forEach(btn => {
-            btn.addEventListener('click', () => viewRequestOffers(btn.getAttribute('data-id')));
-        });
-        
-        document.querySelectorAll('.cancel-loan-btn').forEach(btn => {
-            btn.addEventListener('click', () => cancelLoanRequest(btn.getAttribute('data-id')));
-        });
-    } catch (error) {
-        console.error('Error loading loan requests:', error);
-        document.getElementById('activeLoanRequestsContainer').innerHTML = '<p>Failed to load loan requests. Please try again later.</p>';
-    }
-}
-
-// Load user's active loans
-async function loadUserLoans() {
-    try {
-        const container = document.getElementById('myActiveLoansContainer');
-        container.innerHTML = '<p>Loading your active loans...</p>';
-        
-        // Get user's active loans
-        const loanIds = await lendingContract.getUserActiveLoans(currentAccount);
-        
-        if (loanIds.length === 0) {
-            container.innerHTML = '<p>You have no active loans.</p>';
-            return;
-        }
-        
-        // Clear container
-        container.innerHTML = '';
-        
-        // Create a card for each loan
-        for (const id of loanIds) {
-            const loan = await lendingContract.loans(id);
-            
-            // Calculate remaining time
-            const currentTime = Math.floor(Date.now() / 1000);
-            const endTime = loan.endTime.toNumber();
-            const remainingTime = endTime - currentTime;
-            const remainingDays = Math.max(0, Math.floor(remainingTime / (24 * 60 * 60)));
-            
-            // Calculate total due
-            const interestAmount = loan.amount.mul(loan.interestRate).mul(loan.endTime.sub(loan.startTime)).div(ethers.BigNumber.from(365 * 24 * 60 * 60 * 100));
-            const totalDue = loan.amount.add(interestAmount);
-            const remainingDue = totalDue.sub(loan.repaidAmount);
-            
-            // Create card
-            const cardHtml = `
-                <div class="active-loan-card" data-id="${id}">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h3>Loan #${id.toString()}</h3>
-                            <p>Lender: ${loan.lender.substring(0, 6)}...${loan.lender.substring(38)}</p>
-                            <p>Start date: ${new Date(loan.startTime.toNumber() * 1000).toLocaleDateString()}</p>
-                            <p>Due date: ${new Date(loan.endTime.toNumber() * 1000).toLocaleDateString()}</p>
-                            <p>Remaining time: ${remainingDays} days</p>
-                        </div>
-                        <div class="col-md-4 text-right">
-                            <div class="interest-rate">${loan.interestRate.toNumber() / 100}% APR</div>
-                            <p>Principal: ${ethers.utils.formatEther(loan.amount)} ETH</p>
-                            <p>Repaid: ${ethers.utils.formatEther(loan.repaidAmount)} ETH</p>
-                            <p>Remaining: ${ethers.utils.formatEther(remainingDue)} ETH</p>
-                            <p>Collateral: ${ethers.utils.formatEther(loan.collateralAmount)} ETH</p>
-                        </div>
-                    </div>
-                    <div class="row mt-3">
-                        <div class="col-md-12">
-                            <button class="btn-primary repay-loan-btn" 
-                                data-id="${id}" 
-                                data-remaining="${ethers.utils.formatEther(remainingDue)}">
-                                Repay Loan
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            container.innerHTML += cardHtml;
-        }
-        
-        // Add event listeners for repay buttons
-        document.querySelectorAll('.repay-loan-btn').forEach(btn => {
-            btn.addEventListener('click', () => showRepayLoanForm(
-                btn.getAttribute('data-id'),
-                btn.getAttribute('data-remaining')
-            ));
-        });
-    } catch (error) {
-        console.error('Error loading user loans:', error);
-        document.getElementById('myActiveLoansContainer').innerHTML = '<p>Failed to load your loans. Please try again later.</p>';
-    }
-}
-
-// Load user's investments
-async function loadUserInvestments() {
-    try {
-        const container = document.getElementById('myInvestmentsContainer');
-        container.innerHTML = '<p>Loading your investments...</p>';
-        
-        // Get user's active investments
-        const loanIds = await lendingContract.getUserActiveInvestments(currentAccount);
-        
-        if (loanIds.length === 0) {
-            container.innerHTML = '<p>You have no active investments.</p>';
-            return;
-        }
-        
-        // Clear container
-        container.innerHTML = '';
-        
-        // Create a card for each investment
-        for (const id of loanIds) {
-            const loan = await lendingContract.loans(id);
-            
-            // Calculate remaining time
-            const currentTime = Math.floor(Date.now() / 1000);
-            const endTime = loan.endTime.toNumber();
-            const remainingTime = endTime - currentTime;
-            const remainingDays = Math.max(0, Math.floor(remainingTime / (24 * 60 * 60)));
-            
-            // Calculate expected return
-            const interestAmount = loan.amount.mul(loan.interestRate).mul(loan.endTime.sub(loan.startTime)).div(ethers.BigNumber.from(365 * 24 * 60 * 60 * 100));
-            const totalReturn = loan.amount.add(interestAmount);
-            
-            // Check if loan is past due
-            const isPastDue = currentTime > endTime && loan.repaidAmount.lt(totalReturn);
-            
-            // Create card
-            const cardHtml = `
-                <div class="active-loan-card" data-id="${id}">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h3>Investment #${id.toString()}</h3>
-                            <p>Borrower: ${loan.borrower.substring(0, 6)}...${loan.borrower.substring(38)}</p>
-                            <p>Start date: ${new Date(loan.startTime.toNumber() * 1000).toLocaleDateString()}</p>
-                            <p>Due date: ${new Date(loan.endTime.toNumber() * 1000).toLocaleDateString()}</p>
-                            <p>Remaining time: ${remainingDays} days</p>
-                        </div>
-                        <div class="col-md-4 text-right">
-                            <div class="interest-rate">${loan.interestRate.toNumber() / 100}% APR</div>
-                            <p>Principal: ${ethers.utils.formatEther(loan.amount)} ETH</p>
-                            <p>Expected return: ${ethers.utils.formatEther(totalReturn)} ETH</p>
-                            <p>Repaid so far: ${ethers.utils.formatEther(loan.repaidAmount)} ETH</p>
-                            <p>Collateral: ${ethers.utils.formatEther(loan.collateralAmount)} ETH</p>
-                        </div>
-                    </div>
-                    ${isPastDue ? `
-                    <div class="row mt-3">
-                        <div class="col-md-12">
-                            <button class="btn-danger default-loan-btn" data-id="${id}">Mark as Defaulted</button>
-                        </div>
-                    </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            container.innerHTML += cardHtml;
-        }
-        
-        // Add event listeners for default buttons
-        document.querySelectorAll('.default-loan-btn').forEach(btn => {
-            btn.addEventListener('click', () => markLoanDefaulted(btn.getAttribute('data-id')));
-        });
-    } catch (error) {
-        console.error('Error loading user investments:', error);
-        document.getElementById('myInvestmentsContainer').innerHTML = '<p>Failed to load your investments. Please try again later.</p>';
-    }
-}
-
-// Create a new loan request
-async function createLoanRequest() {
-    try {
-        const loanAmount = ethers.utils.parseEther(document.getElementById('loanAmount').value);
-        const loanDuration = document.getElementById('loanDuration').value;
-        const maxInterestRate = Math.floor(parseFloat(document.getElementById('maxInterestRate').value) * 100); // Convert to basis points
-        const loanPurpose = document.getElementById('loanPurpose').value;
-        const collateralAmount = ethers.utils.parseEther(document.getElementById('collateralAmount').value);
-        
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        // Create the loan request
-        const tx = await lendingContract.createLoanRequest(
-            loanAmount,
-            loanDuration,
-            maxInterestRate,
-            loanPurpose,
-            { value: collateralAmount }
-        );
-        
-        await tx.wait();
-        
-        // Reset form
-        document.getElementById('loanRequestForm').reset();
-        
-        // Reload data
-        await loadUserDashboard();
-        await loadActiveLoanRequests();
-        await loadUserLoans();
-        
-        // Switch to loan requests tab
-        switchTab('loanRequests');
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Loan request created successfully!');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error creating loan request:', error);
-        alert('Failed to create loan request. Please try again.');
-    }
-}
-
-// Cancel a loan request
-async function cancelLoanRequest(requestId) {
-    try {
-        if (!confirm('Are you sure you want to cancel this loan request? Your collateral will be returned.')) {
-            return;
-        }
-        
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        const tx = await lendingContract.cancelLoanRequest(requestId);
-        await tx.wait();
-        
-        // Reload data
-        await loadActiveLoanRequests();
-        await loadUserDashboard();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Loan request cancelled successfully!');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error cancelling loan request:', error);
-        alert('Failed to cancel loan request. Please try again.');
-    }
-}
-
-// View loan details
-async function viewLoanDetails(requestId) {
-    try {
-        const request = await lendingContract.loanRequests(requestId);
-        const modal = document.getElementById('loanDetailsModal');
-        const content = document.getElementById('loanDetailsContent');
-        
-        // Calculate collateralization ratio
-        const collateralRatio = (Number(ethers.utils.formatEther(request.collateralAmount)) / Number(ethers.utils.formatEther(request.amount))) * 100;
-        
-        // Create content
-        content.innerHTML = `
-            <div class="loan-details">
-                <p><strong>Borrower:</strong> ${request.borrower}</p>
-                <p><strong>Loan Amount:</strong> ${ethers.utils.formatEther(request.amount)} ETH</p>
-                <p><strong>Duration:</strong> ${request.durationDays.toString()} days</p>
-                <p><strong>Interest Rate:</strong> ${request.interestRate.toNumber() / 100}% per year</p>
-                <p><strong>Collateral:</strong> ${ethers.utils.formatEther(request.collateralAmount)} ETH</p>
-                <p><strong>Collateralization Ratio:</strong> ${collateralRatio.toFixed(2)}%</p>
-                <p><strong>Purpose:</strong> ${request.purpose}</p>
-                <p><strong>Created:</strong> ${new Date(request.timestamp.toNumber() * 1000).toLocaleString()}</p>
-            </div>
-        `;
-        
-        // Show modal
-        modal.style.display = 'block';
-    } catch (error) {
-        console.error('Error viewing loan details:', error);
-        alert('Failed to load loan details. Please try again.');
-    }
-}
-
-// Show form for making a funding offer
-function showMakeOfferForm(requestId, maxRate, recommendedRate) {
-    // Create and display offer form modal
-    const modal = document.getElementById('loanDetailsModal');
-    const content = document.getElementById('loanDetailsContent');
-    
-    // Create content
-    content.innerHTML = `
-        <div class="offer-form">
-            <h3>Make a Funding Offer</h3>
-            <p>Loan Request ID: ${requestId}</p>
-            <p>Maximum Interest Rate: ${maxRate}%</p>
-            <p>Recommended Rate: ${recommendedRate}% (based on borrower's reputation)</p>
-            <div class="input-group">
-                <label for="offerInterestRate">Your Offered Interest Rate (% per year)</label>
-                <input type="number" id="offerInterestRate" step="0.1" min="1" max="${maxRate}" value="${Math.min(recommendedRate, maxRate)}">
-                <p class="form-text">Lower rates are more likely to be accepted by the borrower.</p>
-            </div>
-            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-                <button id="submitOfferBtn" class="btn btn-primary">
-                    <i class="fas fa-check"></i> Submit Offer
-                </button>
-                <button type="button" class="btn btn-secondary close-modal">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-            </div>
-        </div>
-    `;
-    
-    // Set submit button action
-    document.getElementById('submitOfferBtn').onclick = async () => {
-        const interestRate = parseFloat(document.getElementById('offerInterestRate').value);
-        await createFundingOffer(requestId, interestRate);
-        modal.style.display = 'none';
-    };
-    
-    // Show modal
-    modal.style.display = 'block';
-}
-
-// Create a funding offer
-async function createFundingOffer(requestId, interestRate) {
-    try {
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        const interestRateBasis = Math.floor(interestRate * 100); // Convert to basis points
-        
-        const tx = await lendingContract.createFundingOffer(requestId, interestRateBasis);
-        await tx.wait();
-        
-        // Reload loan requests
-        await loadActiveLoanRequests();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Funding offer created successfully!');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error creating funding offer:', error);
-        alert('Failed to create offer. ' + error.message);
-    }
-}
-
-// View all offers for a request
-async function viewRequestOffers(requestId) {
-    try {
-        const modal = document.getElementById('loanDetailsModal');
-        const content = document.getElementById('loanDetailsContent');
-        
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        // Get request details
-        const request = await lendingContract.loanRequests(requestId);
-        
-        // Get all offers for this request
-        const offerIds = await lendingContract.getRequestOffers(requestId);
-        
-        let offersHtml = '';
-        let isBorrower = request.borrower.toLowerCase() === currentAccount.toLowerCase();
-        
-        if (offerIds.length === 0) {
-            offersHtml = '<p>No offers found for this loan request.</p>';
+            // Initialize loan token contract
+            loanToken = new ethers.Contract(tokenAddress, LOAN_TOKEN_ABI, signer);
         } else {
-            offersHtml = `
-                <table class="offers-table">
-                    <thead>
-                        <tr>
-                            <th>Lender</th>
-                            <th>Interest Rate</th>
-                            <th>Date</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            
-            for (const id of offerIds) {
-                const offer = await lendingContract.fundingOffers(id);
-                
-                // Skip inactive offers unless user is borrower or the offer creator
-                if (offer.status !== 0 && !isBorrower && offer.lender.toLowerCase() !== currentAccount.toLowerCase()) {
-                    continue;
-                }
-                
-                const offerDate = new Date(offer.timestamp.toNumber() * 1000).toLocaleDateString();
-                const rate = offer.interestRate.toNumber() / 100;
-                
-                let statusText = '';
-                let action = '';
-                
-                switch (offer.status) {
-                    case 0: // Active
-                        statusText = '<span class="status-active">Active</span>';
-                        if (isBorrower) {
-                            action = `<button class="btn-success accept-offer-btn" data-id="${offer.id}">Accept</button>`;
-                        } else if (offer.lender.toLowerCase() === currentAccount.toLowerCase()) {
-                            action = `<button class="btn-danger cancel-offer-btn" data-id="${offer.id}">Cancel</button>`;
-                        }
-                        break;
-                    case 1: // Accepted
-                        statusText = '<span class="status-accepted">Accepted</span>';
-                        if (offer.lender.toLowerCase() === currentAccount.toLowerCase()) {
-                            action = `<button class="btn-primary fund-accepted-btn" data-id="${offer.id}" data-amount="${ethers.utils.formatEther(request.amount)}">Fund</button>`;
-                        }
-                        break;
-                    case 2: // Cancelled
-                        statusText = '<span class="status-cancelled">Cancelled</span>';
-                        break;
-                    case 3: // Expired
-                        statusText = '<span class="status-expired">Expired</span>';
-                        break;
-                }
-                
-                offersHtml += `
-                    <tr>
-                        <td>${offer.lender.substring(0, 6)}...${offer.lender.substring(38)}</td>
-                        <td>${rate}%</td>
-                        <td>${offerDate}</td>
-                        <td>${statusText}</td>
-                        <td>${action}</td>
-                    </tr>
-                `;
-            }
-            
-            offersHtml += '</tbody></table>';
+            // Disable token mode
+            const tx = await lendingPlatform.disableTokenMode();
+            await tx.wait();
         }
         
-        // Create content
-        content.innerHTML = `
-            <div class="offers-section">
-                <h3>Offers for Loan Request #${requestId}</h3>
-                <div class="offers-list">
-                    ${offersHtml}
-                </div>
-            </div>
-        `;
+        // Reload admin data
+        await loadAdminData();
         
-        // Add event listeners
-        document.querySelectorAll('.accept-offer-btn').forEach(btn => {
-            btn.addEventListener('click', () => acceptFundingOffer(btn.getAttribute('data-id')));
-        });
-        
-        document.querySelectorAll('.cancel-offer-btn').forEach(btn => {
-            btn.addEventListener('click', () => cancelFundingOffer(btn.getAttribute('data-id')));
-        });
-        
-        document.querySelectorAll('.fund-accepted-btn').forEach(btn => {
-            btn.addEventListener('click', () => fundAcceptedOffer(
-                btn.getAttribute('data-id'),
-                btn.getAttribute('data-amount')
-            ));
-        });
+        // Update global variable
+        usingTokenMode = enableToken;
         
         document.getElementById('loadingSpinner').style.display = 'none';
-        
-        // Show modal
-        modal.style.display = 'block';
+        alert(`Token mode ${enableToken ? 'enabled' : 'disabled'} successfully!`);
     } catch (error) {
         document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error viewing offers:', error);
-        alert('Failed to load offers. ' + error.message);
+        console.error('Error updating token mode:', error);
+        alert('Failed to update token mode. ' + error.message);
     }
 }
 
-// Accept a funding offer
-async function acceptFundingOffer(offerId) {
+// Withdraw platform fees
+async function withdrawPlatformFees() {
     try {
         document.getElementById('loadingSpinner').style.display = 'block';
-        document.getElementById('loanDetailsModal').style.display = 'none';
         
-        const tx = await lendingContract.acceptFundingOffer(offerId);
+        const tx = await lendingPlatform.withdrawPlatformFees();
         await tx.wait();
         
-        // Reload data
-        await loadActiveLoanRequests();
+        // Reload admin data
+        await loadAdminData();
         
         document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Offer accepted successfully! The lender will now fund the loan.');
+        alert('Platform fees withdrawn successfully!');
     } catch (error) {
         document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error accepting offer:', error);
-        alert('Failed to accept offer. ' + error.message);
-    }
-}
-
-// Cancel a funding offer
-async function cancelFundingOffer(offerId) {
-    try {
-        document.getElementById('loadingSpinner').style.display = 'block';
-        document.getElementById('loanDetailsModal').style.display = 'none';
-        
-        const tx = await lendingContract.cancelFundingOffer(offerId);
-        await tx.wait();
-        
-        // Reload data
-        await loadActiveLoanRequests();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Offer cancelled successfully!');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error cancelling offer:', error);
-        alert('Failed to cancel offer. ' + error.message);
-    }
-}
-
-// Fund an accepted offer
-async function fundAcceptedOffer(offerId, amount) {
-    try {
-        document.getElementById('loadingSpinner').style.display = 'block';
-        document.getElementById('loanDetailsModal').style.display = 'none';
-        
-        const amountInWei = ethers.utils.parseEther(amount);
-        
-        const tx = await lendingContract.fundAcceptedOffer(offerId, { value: amountInWei });
-        await tx.wait();
-        
-        // Reload data
-        await loadUserDashboard();
-        await loadActiveLoanRequests();
-        await loadUserInvestments();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Loan funded successfully!');
-        
-        // Switch to investments tab
-        switchTab('myInvestments');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error funding loan:', error);
-        alert('Failed to fund loan. ' + error.message);
-    }
-}
-
-// Show repay loan form
-function showRepayLoanForm(loanId, remainingAmount) {
-    const modal = document.getElementById('repayLoanModal');
-    const content = document.getElementById('repayLoanContent');
-    const repayInput = document.getElementById('repayAmount');
-    
-    // Create content
-    content.innerHTML = `
-        <p>Loan ID: ${loanId}</p>
-        <p>Remaining amount to pay: ${remainingAmount} ETH</p>
-    `;
-    
-    // Set maximum repay amount
-    repayInput.max = remainingAmount;
-    repayInput.value = remainingAmount;
-    
-    // Set form submission handler
-    document.getElementById('repayLoanForm').onsubmit = (e) => {
-        e.preventDefault();
-        repayLoan(loanId, document.getElementById('repayAmount').value);
-    };
-    
-    // Show modal
-    modal.style.display = 'block';
-}
-
-// Repay a loan
-async function repayLoan(loanId, amount) {
-    try {
-        document.getElementById('loadingSpinner').style.display = 'block';
-        document.getElementById('repayLoanModal').style.display = 'none';
-        
-        const amountInWei = ethers.utils.parseEther(amount);
-        
-        const tx = await lendingContract.repayLoan(loanId, { value: amountInWei });
-        await tx.wait();
-        
-        // Reload data
-        await loadUserDashboard();
-        await loadUserLoans();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Loan repayment successful!');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error repaying loan:', error);
-        alert('Failed to repay loan. Please try again.');
-    }
-}
-
-// Mark a loan as defaulted
-async function markLoanDefaulted(loanId) {
-    try {
-        if (!confirm('Are you sure you want to mark this loan as defaulted? You will claim the collateral.')) {
-            return;
-        }
-        
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        const tx = await lendingContract.markLoanDefaulted(loanId);
-        await tx.wait();
-        
-        // Reload data
-        await loadUserDashboard();
-        await loadUserInvestments();
-        
-        document.getElementById('loadingSpinner').style.display = 'none';
-        alert('Loan marked as defaulted. Collateral has been claimed.');
-    } catch (error) {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        console.error('Error marking loan as defaulted:', error);
-        alert('Failed to mark loan as defaulted. Please try again.');
+        console.error('Error withdrawing fees:', error);
+        alert('Failed to withdraw fees. ' + error.message);
     }
 }
 

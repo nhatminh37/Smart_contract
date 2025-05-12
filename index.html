@@ -4,760 +4,240 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>P2P Decentralized Lending Platform</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Primary ethers.js CDN -->
-    <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- Fallback script in case the primary CDN fails -->
-    <script>
-        // Check if ethers loaded
-        window.addEventListener('load', function() {
-            if (typeof window.ethers === 'undefined') {
-                console.log("Primary ethers.js failed to load, trying fallback...");
-                // Create a fallback script
-                var fallbackScript = document.createElement('script');
-                fallbackScript.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
-                fallbackScript.onload = function() {
-                    console.log("Fallback ethers.js loaded successfully!");
-                };
-                fallbackScript.onerror = function() {
-                    console.error("Both primary and fallback ethers.js failed to load.");
-                    alert("Failed to load required libraries. Please try refreshing the page or check your internet connection.");
-                };
-                document.head.appendChild(fallbackScript);
-            } else {
-                console.log("Primary ethers.js loaded successfully!");
-            }
-        });
-    </script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #3a86ff;
-            --secondary-color: #6c757d;
-            --accent-color: #ff006e;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --success-color: #28a745;
-            --warning-color: #ffc107;
-            --danger-color: #dc3545;
-        }
-        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            background-color: #f5f8fa;
+            font-family: 'Arial', sans-serif;
+            background-color: #f5f5f5;
             color: #333;
         }
-        
         .container {
             max-width: 1200px;
-            margin: 0 auto;
             padding: 20px;
         }
-        
-        header {
-            background: linear-gradient(135deg, #3a86ff 0%, #2d63c8 100%);
+        .header {
+            background-color: #343a40;
             color: white;
-            padding: 1.5rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .logo i {
-            font-size: 2rem;
-        }
-        
-        .logo h1 {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin: 0;
-        }
-        
-        /* Grid layout for better organization */
-        .row {
-            display: flex;
-            flex-wrap: wrap;
-            margin: -10px;
-        }
-        
-        .col-md-4, .col-md-8, .col-md-6 {
-            padding: 10px;
-        }
-        
-        .col-md-4 {
-            flex: 0 0 33.333333%;
-            max-width: 33.333333%;
-        }
-        
-        .col-md-6 {
-            flex: 0 0 50%;
-            max-width: 50%;
-        }
-        
-        .col-md-8 {
-            flex: 0 0 66.666667%;
-            max-width: 66.666667%;
-        }
-        
-        @media (max-width: 768px) {
-            .col-md-4, .col-md-6, .col-md-8 {
-                flex: 0 0 100%;
-                max-width: 100%;
-            }
-        }
-        
-        /* Card styles */
-        .card {
-            background-color: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
-            border: 1px solid rgba(0,0,0,0.05);
-        }
-        
-        /* Additional styles specific to lending platform */
-        .reputation-score {
-            font-size: 2.5rem;
-            font-weight: bold;
-            text-align: center;
-            color: var(--primary-color);
-        }
-        
-        .reputation-meter {
-            width: 100%;
-            height: 10px;
-            background-color: #e9ecef;
-            border-radius: 10px;
-            margin: 10px 0;
-            overflow: hidden;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        .reputation-meter .fill {
-            height: 100%;
-            background: linear-gradient(90deg, #3a86ff 0%, #2d63c8 100%);
-            transition: width 0.5s ease-in-out;
-            border-radius: 10px;
-        }
-        
-        .stat-box {
-            background-color: white;
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 15px;
-            text-align: center;
-            border: 1px solid rgba(0,0,0,0.05);
-            transition: transform 0.2s;
-        }
-        
-        .stat-box:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 15px rgba(0,0,0,0.1);
-        }
-        
-        .stat-title {
-            font-size: 0.9rem;
-            color: var(--secondary-color);
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 500;
-        }
-        
-        .stat-value {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: var(--dark-color);
-        }
-        
-        .loan-request-card, .active-loan-card {
-            background-color: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            margin-bottom: 25px;
-            transition: transform 0.3s;
-            border: 1px solid rgba(0,0,0,0.05);
-        }
-        
-        .loan-request-card:hover, .active-loan-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-        }
-        
-        .interest-rate {
-            font-size: 1.4rem;
-            font-weight: bold;
-            color: var(--accent-color);
-            display: inline-block;
-            background-color: rgba(255, 0, 110, 0.1);
-            padding: 5px 10px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
-        
-        .collateral-ratio {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 30px;
-            font-size: 0.85rem;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        
-        .high-collateral {
-            background-color: rgba(40, 167, 69, 0.15);
-            color: var(--success-color);
-        }
-        
-        .medium-collateral {
-            background-color: rgba(255, 193, 7, 0.15);
-            color: var(--warning-color);
-        }
-        
-        .low-collateral {
-            background-color: rgba(220, 53, 69, 0.15);
-            color: var(--danger-color);
-        }
-        
-        .tabs {
-            display: flex;
-            flex-wrap: wrap;
+            padding: 20px 0;
             margin-bottom: 30px;
-            border-bottom: 2px solid #dee2e6;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            overflow: hidden;
         }
-        
-        .tab {
-            padding: 15px 20px;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s;
-            font-weight: 500;
-            text-align: center;
-            flex: 1;
-        }
-        
-        .tab:hover {
-            background-color: rgba(58, 134, 255, 0.05);
-        }
-        
-        .tab.active {
-            border-bottom: 3px solid var(--primary-color);
-            color: var(--primary-color);
-            font-weight: bold;
-            background-color: rgba(58, 134, 255, 0.1);
-        }
-        
-        .tab-content {
-            display: none;
-            animation: fadeIn 0.5s;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        /* Form styles */
-        .input-group {
+        .card {
             margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        
-        .input-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #444;
+        .card-header {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px 10px 0 0;
         }
-        
-        .input-group input, .input-group select, .input-group textarea {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #dce1e6;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            background-color: #f9fafc;
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
         }
-        
-        .input-group input:focus, .input-group select:focus, .input-group textarea:focus {
-            border-color: var(--primary-color);
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.2);
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .loan-request, .loan-item, .investment-item {
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin-bottom: 15px;
+            border-radius: 5px;
             background-color: white;
         }
-        
-        .input-group textarea {
-            min-height: 120px;
-            resize: vertical;
-        }
-        
-        .form-text {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 5px;
-        }
-        
-        /* Button styles */
-        .btn {
+        .status-indicator {
             display: inline-block;
-            font-weight: 500;
-            text-align: center;
-            white-space: nowrap;
-            vertical-align: middle;
-            user-select: none;
-            border: 1px solid transparent;
-            padding: 0.5rem 1rem;
-            font-size: 1rem;
-            line-height: 1.5;
-            border-radius: 0.375rem;
-            transition: 
-                color 0.15s ease-in-out,
-                background-color 0.15s ease-in-out,
-                border-color 0.15s ease-in-out,
-                box-shadow 0.15s ease-in-out,
-                transform 0.15s ease-in-out;
-            cursor: pointer;
-            margin: 5px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
         }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #3a86ff 0%, #2d63c8 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 10px rgba(58, 134, 255, 0.3);
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #f8f9fa;
         }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #2d63c8 0%, #1a4999 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(58, 134, 255, 0.4);
-        }
-        
-        .btn-primary:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 5px rgba(58, 134, 255, 0.4);
-        }
-        
-        .btn-secondary {
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 10px rgba(108, 117, 125, 0.3);
-        }
-        
-        .btn-secondary:hover {
-            background-color: #5a6268;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(108, 117, 125, 0.4);
-        }
-        
-        .btn-danger {
-            background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
-        }
-        
-        .btn-danger:hover {
-            background: linear-gradient(135deg, #c82333 0%, #a01e2c 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(220, 53, 69, 0.4);
-        }
-        
-        /* Loading spinner */
-        #loadingSpinner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s linear infinite;
-            margin-bottom: 15px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Modal styles */
-        .modal {
+        .dialog {
             display: none;
             position: fixed;
-            top: 0;
+            z-index: 1000;
             left: 0;
+            top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-            z-index: 1000;
-            overflow: auto;
-            animation: fadeIn 0.3s;
+            background-color: rgba(0,0,0,0.4);
         }
-        
-        .modal-content {
+        .dialog-content {
             background-color: white;
             margin: 10% auto;
-            padding: 30px;
-            border-radius: 15px;
-            max-width: 600px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            position: relative;
-            animation: slideIn 0.4s;
+            padding: 20px;
+            border-radius: 10px;
+            width: 50%;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
-        
-        @keyframes slideIn {
-            from { transform: translateY(-50px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        
         .close {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            font-size: 28px;
-            cursor: pointer;
             color: #aaa;
-            transition: color 0.3s;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
         }
-        
         .close:hover {
-            color: #333;
-        }
-        
-        /* Footer styles */
-        footer {
-            background-color: #343a40;
-            color: rgba(255, 255, 255, 0.8);
-            text-align: center;
-            padding: 2rem;
-            margin-top: 3rem;
-            border-top: 5px solid var(--primary-color);
-        }
-        
-        footer a {
-            color: var(--primary-color);
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-        
-        footer a:hover {
-            color: white;
-            text-decoration: underline;
-        }
-        
-        /* Wallet connect styles */
-        .wallet-connect {
-            margin-top: 15px;
-            text-align: center;
-        }
-        
-        #walletInfo {
-            background-color: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            padding: 10px 15px;
-            font-size: 0.9rem;
-            margin-top: 10px;
-            display: inline-block;
-        }
-        
-        #walletAddress {
-            font-family: monospace;
-            margin-right: 15px;
-            font-weight: bold;
-        }
-        
-        #walletBalance {
-            font-weight: bold;
-            color: #e2f0ff;
-        }
-        
-        .text-center {
-            text-align: center;
-        }
-        
-        .form-actions {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 25px;
+            color: black;
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="logo">
-            <i class="fas fa-handshake"></i>
-            <h1>P2P Lending Platform</h1>
+    <div class="header">
+        <div class="container">
+            <h1>P2P Decentralized Lending Platform</h1>
+            <div id="networkInfo"></div>
+            <div id="userAddress"></div>
         </div>
-        <nav>
-            <ul>
-                <li><a href="#" class="active">P2P Lending</a></li>
-            </ul>
-        </nav>
-        <div class="wallet-connect">
-            <button id="connectWalletBtn" class="btn btn-primary">
-                <i class="fas fa-wallet"></i> Connect Wallet
-            </button>
-            <div id="walletInfo" style="display: none;">
-                <span id="walletAddress"></span>
-                <span id="walletBalance"></span>
-            </div>
-        </div>
-    </header>
-
-    <main class="container">
-        <section id="registerSection" style="display: none;">
+    </div>
+    
+    <div class="container">
+        <div id="status" class="alert alert-info">Please connect your wallet...</div>
+        
+        <!-- Registration Section -->
+        <div id="registrationSection" style="display:none;">
             <div class="card">
-                <h2>Register as a User</h2>
-                <p>You need to register to use the P2P lending platform.</p>
-                <div class="text-center" style="margin-top: 20px;">
-                    <button id="registerBtn" class="btn btn-primary">
-                        <i class="fas fa-user-plus"></i> Register Now
-                    </button>
+                <div class="card-header">Register to use the Platform</div>
+                <div class="card-body">
+                    <p>You need to register to use the lending platform.</p>
+                    <button id="registerButton" class="btn btn-primary">Register</button>
                 </div>
             </div>
-        </section>
-
-        <section id="platformSection" style="display: none;">
-            <div class="tabs">
-                <div class="tab active" data-tab="dashboard">
-                    <i class="fas fa-chart-line"></i> Dashboard
-                </div>
-                <div class="tab" data-tab="loanRequests">
-                    <i class="fas fa-hand-holding-usd"></i> Loan Requests
-                </div>
-                <div class="tab" data-tab="myLoans">
-                    <i class="fas fa-file-invoice-dollar"></i> My Loans
-                </div>
-                <div class="tab" data-tab="myInvestments">
-                    <i class="fas fa-coins"></i> My Investments
-                </div>
-                <div class="tab" data-tab="createRequest">
-                    <i class="fas fa-plus-circle"></i> Request Loan
-                </div>
-            </div>
-
-            <!-- Dashboard Tab -->
-            <div id="dashboardTab" class="tab-content active">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="card">
-                            <h3 class="text-center">Reputation Score</h3>
-                            <div class="reputation-score" id="reputationScore">--</div>
-                            <div class="reputation-meter">
-                                <div class="fill" id="reputationMeter" style="width: 50%;"></div>
-                            </div>
-                            <p class="text-center">Your on-chain reputation affects interest rates</p>
-                        </div>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="stat-box">
-                                    <div class="stat-title">Loans Requested</div>
-                                    <div class="stat-value" id="loansRequestedStat">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="stat-box">
-                                    <div class="stat-title">Loans Funded</div>
-                                    <div class="stat-value" id="loansFundedStat">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="stat-box">
-                                    <div class="stat-title">Repaid On Time</div>
-                                    <div class="stat-value" id="loansRepaidStat">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="stat-box">
-                                    <div class="stat-title">Defaults</div>
-                                    <div class="stat-value" id="loansDefaultedStat">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="stat-box">
-                                    <div class="stat-title">Avg. Collateralization</div>
-                                    <div class="stat-value" id="collateralizationStat">0%</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="stat-box">
-                                    <div class="stat-title">Total Transactions</div>
-                                    <div class="stat-value" id="transactionsStat">0</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Loan Requests Tab -->
-            <div id="loanRequestsTab" class="tab-content">
-                <h2><i class="fas fa-hand-holding-usd"></i> Active Loan Requests</h2>
-                <div id="activeLoanRequestsContainer">
-                    <p class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading loan requests...</p>
-                </div>
-            </div>
-
-            <!-- My Loans Tab -->
-            <div id="myLoansTab" class="tab-content">
-                <h2><i class="fas fa-file-invoice-dollar"></i> My Active Loans</h2>
-                <div id="myActiveLoansContainer">
-                    <p class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading your active loans...</p>
-                </div>
-            </div>
-
-            <!-- My Investments Tab -->
-            <div id="myInvestmentsTab" class="tab-content">
-                <h2><i class="fas fa-coins"></i> My Investments</h2>
-                <div id="myInvestmentsContainer">
-                    <p class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading your investments...</p>
-                </div>
-            </div>
-
-            <!-- Create Loan Request Tab -->
-            <div id="createRequestTab" class="tab-content">
-                <div class="card">
-                    <h2><i class="fas fa-plus-circle"></i> Request a Loan</h2>
-                    <form id="loanRequestForm">
-                        <div class="input-group">
-                            <label for="loanAmount">Loan Amount (ETH)</label>
-                            <input type="number" id="loanAmount" step="0.01" min="0.01" required>
-                        </div>
-                        <div class="input-group">
-                            <label for="loanDuration">Duration (Days)</label>
-                            <input type="number" id="loanDuration" min="1" required>
-                        </div>
-                        <div class="input-group">
-                            <label for="maxInterestRate">Maximum Interest Rate (% per year)</label>
-                            <input type="number" id="maxInterestRate" step="0.1" min="1" required>
-                            <p class="form-text">Lenders will compete to offer you the best rate within your maximum limit.</p>
-                        </div>
-                        <div class="input-group">
-                            <label for="loanPurpose">Loan Purpose</label>
-                            <textarea id="loanPurpose" required></textarea>
-                        </div>
-                        <div class="input-group">
-                            <label for="collateralAmount">Collateral Amount (ETH)</label>
-                            <input type="number" id="collateralAmount" step="0.01" min="0.01" required>
-                            <p class="form-text">Higher collateral improves your chances of getting good offers and affects your reputation.</p>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-check-circle"></i> Create Loan Request
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </section>
-
-        <!-- Loading Spinner -->
-        <div id="loadingSpinner" style="display: none;">
-            <div class="spinner"></div>
-            <p style="color: white; font-weight: 500;">Processing transaction...</p>
         </div>
-
-        <!-- Loan Request Details Modal -->
-        <div id="loanDetailsModal" class="modal">
-            <div class="modal-content">
-                <span class="close">&times;</span>
-                <h2><i class="fas fa-info-circle"></i> Loan Request Details</h2>
-                <div id="loanDetailsContent"></div>
-                <div id="fundLoanForm" style="display: none;">
-                    <h3><i class="fas fa-money-bill-wave"></i> Fund this Loan</h3>
-                    <p>You are about to fund <span id="fundAmount" style="font-weight: bold; color: var(--primary-color);"></span> ETH to this loan request.</p>
-                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-                        <button id="confirmFundBtn" class="btn btn-primary">
-                            <i class="fas fa-check"></i> Confirm Funding
-                        </button>
-                        <button class="btn btn-secondary close-modal">
-                            <i class="fas fa-times"></i> Cancel
-                        </button>
+        
+        <!-- Main Platform Section -->
+        <div id="platformContent" style="display:none;">
+            <ul class="nav nav-tabs mb-4">
+                <li class="nav-item">
+                    <a class="nav-link active" data-bs-toggle="tab" href="#dashboardTab">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#loanRequestsTab">Loan Requests</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#myLoansTab">My Loans</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#myInvestmentsTab">My Investments</a>
+                </li>
+            </ul>
+            
+            <div class="tab-content">
+                <!-- Dashboard Tab -->
+                <div class="tab-pane fade show active" id="dashboardTab">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Your Reputation</div>
+                                <div class="card-body" id="userReputation">Loading...</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Create Loan Request</div>
+                                <div class="card-body">
+                                    <form id="loanRequestForm">
+                                        <div class="mb-3">
+                                            <label for="loanAmount" class="form-label">Loan Amount (ETH)</label>
+                                            <input type="number" class="form-control" id="loanAmount" step="0.01" min="0.01" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="loanDuration" class="form-label">Duration (Days)</label>
+                                            <input type="number" class="form-control" id="loanDuration" min="1" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="maxInterestRate" class="form-label">Maximum Interest Rate (% per year)</label>
+                                            <input type="number" class="form-control" id="maxInterestRate" step="0.1" min="1" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="collateralAmount" class="form-label">Collateral Amount (ETH)</label>
+                                            <input type="number" class="form-control" id="collateralAmount" step="0.01" min="0.01" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="loanPurpose" class="form-label">Purpose</label>
+                                            <textarea class="form-control" id="loanPurpose" rows="3" required></textarea>
+                                        </div>
+                                        <button type="button" id="submitLoanRequest" class="btn btn-primary">Create Loan Request</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Loan Requests Tab -->
+                <div class="tab-pane fade" id="loanRequestsTab">
+                    <div class="card">
+                        <div class="card-header">Active Loan Requests</div>
+                        <div class="card-body">
+                            <div id="loanRequests">Loading loan requests...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- My Loans Tab -->
+                <div class="tab-pane fade" id="myLoansTab">
+                    <div class="card">
+                        <div class="card-header">Your Active Loans</div>
+                        <div class="card-body">
+                            <div id="userLoans">Loading your loans...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- My Investments Tab -->
+                <div class="tab-pane fade" id="myInvestmentsTab">
+                    <div class="card">
+                        <div class="card-header">Your Investments</div>
+                        <div class="card-body">
+                            <div id="userInvestments">Loading your investments...</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Repay Loan Modal -->
-        <div id="repayLoanModal" class="modal">
-            <div class="modal-content">
-                <span class="close">&times;</span>
-                <h2><i class="fas fa-hand-holding-usd"></i> Repay Loan</h2>
-                <div id="repayLoanContent"></div>
-                <form id="repayLoanForm">
-                    <div class="input-group">
-                        <label for="repayAmount">Amount to Repay (ETH)</label>
-                        <input type="number" id="repayAmount" step="0.01" min="0.01" required>
-                    </div>
-                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-check"></i> Repay
-                        </button>
-                        <button type="button" class="btn btn-secondary close-modal">
-                            <i class="fas fa-times"></i> Cancel
-                        </button>
-                    </div>
-                </form>
+    </div>
+    
+    <!-- Funding Dialog -->
+    <div id="fundingDialog" class="dialog">
+        <div class="dialog-content">
+            <span id="closeFundingDialog" class="close">&times;</span>
+            <h2>Make a Funding Offer</h2>
+            <input type="hidden" id="fundRequestId">
+            <div class="mb-3">
+                <label for="offerInterestRate" class="form-label">Interest Rate (% per year)</label>
+                <input type="number" class="form-control" id="offerInterestRate" step="0.1" min="1" required>
             </div>
+            <button id="submitFunding" class="btn btn-primary">Submit Offer</button>
         </div>
-    </main>
-
-    <footer>
-        <p>&copy; 2023 P2P Lending Platform | <a href="#">Terms of Service</a> | <a href="#">Privacy Policy</a></p>
-    </footer>
-
-    <!-- Order of scripts is important -->
-    <script src="lending-abi.js"></script>
-    <script src="lending-app.js"></script>
+    </div>
+    
+    <!-- Repay Dialog -->
+    <div id="repayDialog" class="dialog">
+        <div class="dialog-content">
+            <span id="closeRepayDialog" class="close">&times;</span>
+            <h2>Repay Loan</h2>
+            <input type="hidden" id="repayLoanId">
+            <p>Are you sure you want to repay this loan? This will transfer the full amount due to the lender and return your collateral.</p>
+            <button id="submitRepayment" class="btn btn-primary">Repay Loan</button>
+        </div>
+    </div>
+    
+    <!-- Bootstrap and Ethers.js -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.ethers.io/lib/ethers-5.6.umd.min.js" type="application/javascript"></script>
+    
+    <!-- Custom JavaScript -->
+    <script type="module" src="./lending-app.js"></script>
 </body>
 </html> 
