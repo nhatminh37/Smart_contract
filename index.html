@@ -98,6 +98,11 @@
             <h1>P2P Decentralized Lending Platform</h1>
             <div id="networkInfo"></div>
             <div id="userAddress"></div>
+            <div id="walletInfo" style="display: none;">
+                <p>Wallet: <span id="walletAddress"></span></p>
+                <p>Balance: <span id="walletBalance"></span></p>
+            </div>
+            <button id="connectWalletBtn" class="btn btn-light">Connect Wallet</button>
         </div>
     </div>
     
@@ -110,36 +115,59 @@
                 <div class="card-header">Register to use the Platform</div>
                 <div class="card-body">
                     <p>You need to register to use the lending platform.</p>
-                    <button id="registerButton" class="btn btn-primary">Register</button>
+                    <button id="registerBtn" class="btn btn-primary">Register</button>
                 </div>
             </div>
         </div>
         
         <!-- Main Platform Section -->
-        <div id="platformContent" style="display:none;">
+        <div id="platformSection" style="display:none;">
             <ul class="nav nav-tabs mb-4">
                 <li class="nav-item">
-                    <a class="nav-link active" data-bs-toggle="tab" href="#dashboardTab">Dashboard</a>
+                    <a class="nav-link active tab" data-tab="dashboard" data-bs-toggle="tab" href="#dashboardTab">Dashboard</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#loanRequestsTab">Loan Requests</a>
+                    <a class="nav-link tab" data-tab="loanRequests" data-bs-toggle="tab" href="#loanRequestsTab">Loan Requests</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#myLoansTab">My Loans</a>
+                    <a class="nav-link tab" data-tab="myLoans" data-bs-toggle="tab" href="#myLoansTab">My Loans</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#myInvestmentsTab">My Investments</a>
+                    <a class="nav-link tab" data-tab="myInvestments" data-bs-toggle="tab" href="#myInvestmentsTab">My Investments</a>
+                </li>
+                <li class="nav-item" id="adminTab" style="display:none;">
+                    <a class="nav-link tab" data-tab="admin" data-bs-toggle="tab" href="#adminTab">Admin</a>
                 </li>
             </ul>
             
             <div class="tab-content">
                 <!-- Dashboard Tab -->
-                <div class="tab-pane fade show active" id="dashboardTab">
+                <div class="tab-pane fade show active tab-content" id="dashboardTab">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="card">
                                 <div class="card-header">Your Reputation</div>
-                                <div class="card-body" id="userReputation">Loading...</div>
+                                <div class="card-body">
+                                    <div id="userReputation">Loading...</div>
+                                    <div class="progress mt-3">
+                                        <div id="reputationMeter" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <div class="stats-grid mt-3">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p>Reputation Score: <span id="reputationScore">0</span></p>
+                                                <p>Loans Requested: <span id="loansRequestedStat">0</span></p>
+                                                <p>Loans Funded: <span id="loansFundedStat">0</span></p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p>Loans Repaid: <span id="loansRepaidStat">0</span></p>
+                                                <p>Loans Defaulted: <span id="loansDefaultedStat">0</span></p>
+                                                <p>Total Transactions: <span id="transactionsStat">0</span></p>
+                                                <p>Collateralization: <span id="collateralizationStat">0%</span></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -176,17 +204,33 @@
                 </div>
                 
                 <!-- Loan Requests Tab -->
-                <div class="tab-pane fade" id="loanRequestsTab">
+                <div class="tab-pane fade tab-content" id="loanRequestsTab">
                     <div class="card">
-                        <div class="card-header">Active Loan Requests</div>
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>Active Loan Requests</span>
+                                <div>
+                                    <select id="sortRequests" class="form-select form-select-sm d-inline-block" style="width: auto;">
+                                        <option value="newest">Newest First</option>
+                                        <option value="oldest">Oldest First</option>
+                                        <option value="amountAsc">Amount (Low to High)</option>
+                                        <option value="amountDesc">Amount (High to Low)</option>
+                                        <option value="collateralAsc">Collateral (Low to High)</option>
+                                        <option value="collateralDesc">Collateral (High to Low)</option>
+                                    </select>
+                                    <button id="refreshRequests" class="btn btn-sm btn-outline-light">Refresh</button>
+                                </div>
+                            </div>
+                        </div>
                         <div class="card-body">
                             <div id="loanRequests">Loading loan requests...</div>
+                            <div id="requestsPagination" class="mt-3"></div>
                         </div>
                     </div>
                 </div>
                 
                 <!-- My Loans Tab -->
-                <div class="tab-pane fade" id="myLoansTab">
+                <div class="tab-pane fade tab-content" id="myLoansTab">
                     <div class="card">
                         <div class="card-header">Your Active Loans</div>
                         <div class="card-body">
@@ -196,11 +240,59 @@
                 </div>
                 
                 <!-- My Investments Tab -->
-                <div class="tab-pane fade" id="myInvestmentsTab">
+                <div class="tab-pane fade tab-content" id="myInvestmentsTab">
                     <div class="card">
                         <div class="card-header">Your Investments</div>
                         <div class="card-body">
                             <div id="userInvestments">Loading your investments...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Admin Tab -->
+                <div class="tab-pane fade tab-content" id="adminTab">
+                    <div class="card">
+                        <div class="card-header">Platform Administration</div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h4>Platform Settings</h4>
+                                    <form id="adminSettingsForm">
+                                        <div class="mb-3">
+                                            <label for="platformBaseRate" class="form-label">Base Interest Rate (% per year)</label>
+                                            <input type="number" class="form-control" id="platformBaseRate" step="0.1" min="1" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="platformFeePercent" class="form-label">Platform Fee (%)</label>
+                                            <input type="number" class="form-control" id="platformFeePercent" step="0.1" min="0" max="10" required>
+                                        </div>
+                                        <button type="button" id="updateSettingsBtn" class="btn btn-primary">Update Settings</button>
+                                    </form>
+                                    
+                                    <h4 class="mt-4">Token Mode</h4>
+                                    <form id="tokenModeForm">
+                                        <div class="mb-3 form-check">
+                                            <input type="checkbox" class="form-check-input" id="usingTokenMode">
+                                            <label class="form-check-label" for="usingTokenMode">Enable Token Mode</label>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="tokenAddress" class="form-label">Token Address</label>
+                                            <input type="text" class="form-control" id="tokenAddress">
+                                        </div>
+                                        <button type="button" id="updateTokenModeBtn" class="btn btn-primary">Update Token Mode</button>
+                                    </form>
+                                </div>
+                                <div class="col-md-6">
+                                    <h4>Platform Statistics</h4>
+                                    <div class="stats-grid">
+                                        <p>Total Loan Requests: <span id="adminTotalRequestsStat">0</span></p>
+                                        <p>Total Funded Loans: <span id="adminTotalLoansStat">0</span></p>
+                                        <p>Current Platform Fee: <span id="adminCurrentFeeStat">0%</span></p>
+                                        <p>Collected Fees: <span id="adminCollectedFeesStat">0 ETH</span></p>
+                                    </div>
+                                    <button id="withdrawFeesBtn" class="btn btn-success mt-3">Withdraw Platform Fees</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -233,9 +325,44 @@
         </div>
     </div>
     
+    <!-- Repay Loan Modal -->
+    <div id="repayLoanModal" class="dialog">
+        <div class="dialog-content">
+            <span class="close">&times;</span>
+            <h2>Repay Loan</h2>
+            <div id="repayLoanContent"></div>
+            <form id="repayLoanForm">
+                <div class="mb-3">
+                    <label for="repayAmount" class="form-label">Amount to Repay (ETH)</label>
+                    <input type="number" class="form-control" id="repayAmount" step="0.01" min="0.01" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Repay</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Loan Details Modal -->
+    <div id="loanDetailsModal" class="dialog">
+        <div class="dialog-content">
+            <span class="close">&times;</span>
+            <h2>Loan Details</h2>
+            <div id="loanDetailsContent"></div>
+        </div>
+    </div>
+    
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 9999;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+            <div class="spinner-border text-light" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+    
     <!-- Bootstrap and Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.ethers.io/lib/ethers-5.6.umd.min.js" type="application/javascript"></script>
+    <!-- Use a CDN that works more reliably -->
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
     
     <!-- Custom JavaScript -->
     <script type="module" src="./lending-app.js"></script>
