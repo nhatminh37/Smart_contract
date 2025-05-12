@@ -530,3 +530,105 @@ footer a:hover {
     visibility: visible !important;
     opacity: 1 !important;
 }
+
+/* Competitive funding-specific styles */
+.best-offer {
+    display: inline-block;
+    background-color: rgba(58, 134, 255, 0.1);
+    color: var(--primary-color);
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-top: 5px;
+}
+
+.offers-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+.offers-table th, .offers-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.offers-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.offers-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+.status-active {
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.status-accepted {
+    color: var(--success-color);
+    font-weight: bold;
+}
+
+.status-cancelled {
+    color: var(--secondary-color);
+}
+
+.status-expired {
+    color: var(--danger-color);
+}
+
+.offer-form {
+    padding: 15px 0;
+}
+
+.offer-form h3 {
+    margin-bottom: 15px;
+    color: var(--primary-color);
+}
+
+.offer-form p {
+    margin-bottom: 10px;
+}
+
+.btn-warning {
+    background-color: var(--warning-color);
+    color: #212529;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 10px rgba(255, 193, 7, 0.3);
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(255, 193, 7, 0.4);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20913a 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(40, 167, 69, 0.4);
+}

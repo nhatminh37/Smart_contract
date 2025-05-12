@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title LendingPlatform
- * @dev A peer-to-peer decentralized lending platform with reputation scoring
+ * @dev A peer-to-peer decentralized lending platform with reputation scoring and competitive lending
  */
 contract LendingPlatform is Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
@@ -15,10 +15,12 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
     // Counters for IDs
     Counters.Counter private _loanRequestIds;
     Counters.Counter private _loanIds;
+    Counters.Counter private _offerIds;
     
     // Status enums
-    enum LoanRequestStatus { Active, Funded, Cancelled }
+    enum LoanRequestStatus { Active, Funded, Cancelled, Expired }
     enum LoanStatus { Active, Repaid, Defaulted }
+    enum OfferStatus { Active, Accepted, Cancelled, Expired }
     
     // User reputation data
     struct UserReputation {
@@ -32,17 +34,36 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         bool isRegistered;             // Whether user is registered
     }
     
+    // Platform settings
+    uint256 public platformBaseRate = 500;  // 5.00% base interest rate (x100 for precision)
+    uint256 public maxReputationDiscount = 400; // Maximum discount of 4.00% for perfect reputation
+    uint256 public requestExpirationTime = 7 days;
+    uint256 public offerExpirationTime = 2 days;
+    uint256 public platformFeePercent = 100; // 1.00% fee per loan (x100 for precision)
+    uint256 public collectedFees = 0; // Total fees collected by the platform
+    
     // Loan request structure
     struct LoanRequest {
         uint256 id;
         address borrower;
         uint256 amount;
         uint256 durationDays;
-        uint256 interestRate;          // Interest rate (per year, x100 for precision)
+        uint256 maxInterestRate;       // Maximum interest rate borrower is willing to accept
         uint256 collateralAmount;      // Amount of collateral provided
         string purpose;                // Purpose of the loan
         uint256 timestamp;             // When the request was created
         LoanRequestStatus status;      // Status of the loan request
+        uint256 bestOfferId;           // ID of the best offer (lowest interest rate)
+    }
+    
+    // Funding offer structure
+    struct FundingOffer {
+        uint256 id;
+        uint256 requestId;             // The loan request ID
+        address lender;
+        uint256 interestRate;          // Offered interest rate (per year, x100 for precision)
+        uint256 timestamp;             // When the offer was made
+        OfferStatus status;            // Status of the offer
     }
     
     // Active loan structure
@@ -64,17 +85,29 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
     mapping(address => UserReputation) public userReputations;
     mapping(uint256 => LoanRequest) public loanRequests;
     mapping(uint256 => Loan) public loans;
+    mapping(uint256 => FundingOffer) public fundingOffers;
+    mapping(uint256 => uint256[]) public requestOffers; // requestId => offerIds[]
+    mapping(address => uint256[]) public userLoanRequests; // borrower => requestIds[]
+    mapping(address => uint256[]) public userFundingOffers; // lender => offerIds[]
     
     // Events
     event UserRegistered(address indexed user);
     event ReputationUpdated(address indexed user, uint256 newScore);
-    event LoanRequestCreated(uint256 indexed requestId, address indexed borrower, uint256 amount, uint256 interestRate);
+    event LoanRequestCreated(uint256 indexed requestId, address indexed borrower, uint256 amount, uint256 maxInterestRate);
     event LoanRequestCancelled(uint256 indexed requestId);
-    event LoanFunded(uint256 indexed loanId, uint256 indexed requestId, address indexed lender, address borrower, uint256 amount);
+    event LoanRequestExpired(uint256 indexed requestId);
+    event FundingOfferCreated(uint256 indexed offerId, uint256 indexed requestId, address indexed lender, uint256 interestRate);
+    event FundingOfferCancelled(uint256 indexed offerId);
+    event FundingOfferAccepted(uint256 indexed offerId, uint256 indexed requestId);
+    event LoanFunded(uint256 indexed loanId, uint256 indexed requestId, address indexed lender, address borrower, uint256 amount, uint256 interestRate);
     event LoanRepaid(uint256 indexed loanId, uint256 amount);
     event LoanDefaulted(uint256 indexed loanId);
     event CollateralReturned(uint256 indexed loanId, address borrower, uint256 amount);
     event CollateralClaimed(uint256 indexed loanId, address lender, uint256 amount);
+    event PlatformBaseRateUpdated(uint256 newRate);
+    event PlatformFeeUpdated(uint256 newFeePercent);
+    event PlatformFeesWithdrawn(uint256 amount);
+    event PlatformFeeCollected(uint256 loanId, uint256 feeAmount);
     
     constructor() Ownable(msg.sender) {}
     
@@ -94,6 +127,11 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         _;
     }
     
+    modifier offerExists(uint256 offerId) {
+        require(offerId > 0 && offerId <= _offerIds.current(), "Funding offer does not exist");
+        _;
+    }
+    
     // User registration and reputation management
     /**
      * @dev Register a new user on the platform
@@ -109,33 +147,29 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
     }
     
     /**
-     * @dev Calculate dynamic interest rate based on borrower's reputation
+     * @dev Get the recommended interest rate for a borrower based on reputation
      * @param borrowerAddress The address of the borrower
-     * @param baseInterestRate The base interest rate (in percent, x100 for precision)
-     * @return The adjusted interest rate
+     * @return The recommended interest rate
      */
-    function calculateDynamicInterestRate(address borrowerAddress, uint256 baseInterestRate) public view returns (uint256) {
+    function getRecommendedInterestRate(address borrowerAddress) public view returns (uint256) {
         UserReputation storage reputation = userReputations[borrowerAddress];
         
         if (!reputation.isRegistered) {
-            return baseInterestRate; // Use base rate for unregistered users
+            return platformBaseRate; // Use base rate for unregistered users
         }
         
-        // Adjust interest rate based on reputation score (0-100)
-        // Lower score = higher interest rate, higher score = lower interest rate
-        // Maximum adjustment: +/- 5% (500 basis points)
-        int256 adjustment = int256(50) - int256(reputation.reputationScore);
+        // Calculate discount based on reputation score (0-100)
+        // Higher score = lower interest rate
+        // Maximum discount is maxReputationDiscount for a score of 100
+        uint256 discountPerPoint = maxReputationDiscount / 100;
+        uint256 discount = (reputation.reputationScore * discountPerPoint);
         
-        // Each point of reputation is worth 10 basis points (0.1%)
-        adjustment = (adjustment * 10);
-        
-        // Apply adjustment to base rate, ensuring it doesn't go below 1%
-        int256 adjustedRate = int256(baseInterestRate) + adjustment;
-        if (adjustedRate < 100) { // 1%
-            adjustedRate = 100;
+        // Ensure the interest rate doesn't go below 1%
+        if (discount >= platformBaseRate - 100) {
+            return 100; // 1% minimum
         }
         
-        return uint256(adjustedRate);
+        return platformBaseRate - discount;
     }
     
     /**
@@ -164,6 +198,40 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         emit ReputationUpdated(user, reputation.reputationScore);
     }
     
+    // Admin functions
+    /**
+     * @dev Update the platform base interest rate
+     * @param newRate The new base rate (x100 for precision)
+     */
+    function updatePlatformBaseRate(uint256 newRate) external onlyOwner {
+        require(newRate >= 100, "Base rate must be at least 1%");
+        platformBaseRate = newRate;
+        emit PlatformBaseRateUpdated(newRate);
+    }
+    
+    /**
+     * @dev Update the platform fee percentage
+     * @param newFeePercent The new fee percentage (x100 for precision)
+     */
+    function updatePlatformFee(uint256 newFeePercent) external onlyOwner {
+        require(newFeePercent <= 500, "Fee cannot exceed 5%");
+        platformFeePercent = newFeePercent;
+        emit PlatformFeeUpdated(newFeePercent);
+    }
+    
+    /**
+     * @dev Withdraw collected platform fees
+     */
+    function withdrawPlatformFees() external onlyOwner {
+        uint256 amount = collectedFees;
+        require(amount > 0, "No fees to withdraw");
+        
+        collectedFees = 0;
+        payable(owner()).transfer(amount);
+        
+        emit PlatformFeesWithdrawn(amount);
+    }
+    
     // Loan request functions
     /**
      * @dev Create a new loan request
@@ -171,12 +239,13 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
     function createLoanRequest(
         uint256 amount,
         uint256 durationDays,
-        uint256 interestRate,
+        uint256 maxInterestRate,
         string memory purpose
     ) public payable onlyRegistered {
         require(amount > 0, "Loan amount must be greater than 0");
         require(durationDays > 0, "Loan duration must be greater than 0");
         require(msg.value > 0, "Collateral required");
+        require(maxInterestRate >= 100, "Max interest rate must be at least 1%");
         
         uint256 collateralAmount = msg.value;
         
@@ -204,13 +273,17 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         request.borrower = msg.sender;
         request.amount = amount;
         request.durationDays = durationDays;
-        request.interestRate = interestRate;
+        request.maxInterestRate = maxInterestRate;
         request.collateralAmount = collateralAmount;
         request.purpose = purpose;
         request.timestamp = block.timestamp;
         request.status = LoanRequestStatus.Active;
+        request.bestOfferId = 0;
         
-        emit LoanRequestCreated(requestId, msg.sender, amount, interestRate);
+        // Add to user's loan requests
+        userLoanRequests[msg.sender].push(requestId);
+        
+        emit LoanRequestCreated(requestId, msg.sender, amount, maxInterestRate);
     }
     
     /**
@@ -227,21 +300,168 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         // Return collateral to borrower
         payable(request.borrower).transfer(request.collateralAmount);
         
+        // Cancel all active offers for this request
+        uint256[] storage offers = requestOffers[requestId];
+        for (uint i = 0; i < offers.length; i++) {
+            FundingOffer storage offer = fundingOffers[offers[i]];
+            if (offer.status == OfferStatus.Active) {
+                offer.status = OfferStatus.Cancelled;
+                emit FundingOfferCancelled(offer.id);
+            }
+        }
+        
         emit LoanRequestCancelled(requestId);
     }
     
     /**
-     * @dev Fund a loan request
+     * @dev Check if a loan request has expired and update its status if needed
      */
-    function fundLoan(uint256 requestId) public payable loanRequestExists(requestId) onlyRegistered {
+    function checkLoanRequestExpiry(uint256 requestId) public loanRequestExists(requestId) returns (bool) {
+        LoanRequest storage request = loanRequests[requestId];
+        
+        if (request.status != LoanRequestStatus.Active) {
+            return false;
+        }
+        
+        if (block.timestamp > request.timestamp + requestExpirationTime) {
+            request.status = LoanRequestStatus.Expired;
+            
+            // Return collateral to borrower
+            payable(request.borrower).transfer(request.collateralAmount);
+            
+            // Cancel all active offers for this request
+            uint256[] storage offers = requestOffers[requestId];
+            for (uint i = 0; i < offers.length; i++) {
+                FundingOffer storage offer = fundingOffers[offers[i]];
+                if (offer.status == OfferStatus.Active) {
+                    offer.status = OfferStatus.Expired;
+                }
+            }
+            
+            emit LoanRequestExpired(requestId);
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * @dev Create a funding offer for a loan request
+     */
+    function createFundingOffer(uint256 requestId, uint256 interestRate) public onlyRegistered loanRequestExists(requestId) {
         LoanRequest storage request = loanRequests[requestId];
         
         require(request.status == LoanRequestStatus.Active, "Request not active");
-        require(msg.value == request.amount, "Incorrect loan amount");
         require(msg.sender != request.borrower, "Cannot fund own loan");
+        require(interestRate <= request.maxInterestRate, "Interest rate too high");
+        require(interestRate >= 100, "Interest rate must be at least 1%");
         
-        // Update loan request status
+        // Check if the request is expired
+        bool expired = checkLoanRequestExpiry(requestId);
+        require(!expired, "Loan request has expired");
+        
+        // Create new funding offer
+        _offerIds.increment();
+        uint256 offerId = _offerIds.current();
+        
+        FundingOffer storage offer = fundingOffers[offerId];
+        offer.id = offerId;
+        offer.requestId = requestId;
+        offer.lender = msg.sender;
+        offer.interestRate = interestRate;
+        offer.timestamp = block.timestamp;
+        offer.status = OfferStatus.Active;
+        
+        // Add to request's offers and user's offers
+        requestOffers[requestId].push(offerId);
+        userFundingOffers[msg.sender].push(offerId);
+        
+        // Update best offer if this is the lowest interest rate
+        if (request.bestOfferId == 0 || 
+            fundingOffers[request.bestOfferId].interestRate > interestRate ||
+            fundingOffers[request.bestOfferId].status != OfferStatus.Active) {
+            request.bestOfferId = offerId;
+        }
+        
+        emit FundingOfferCreated(offerId, requestId, msg.sender, interestRate);
+    }
+    
+    /**
+     * @dev Cancel a funding offer
+     */
+    function cancelFundingOffer(uint256 offerId) public offerExists(offerId) {
+        FundingOffer storage offer = fundingOffers[offerId];
+        
+        require(msg.sender == offer.lender, "Only lender can cancel");
+        require(offer.status == OfferStatus.Active, "Offer not active");
+        
+        offer.status = OfferStatus.Cancelled;
+        
+        // Update best offer if needed
+        LoanRequest storage request = loanRequests[offer.requestId];
+        if (request.bestOfferId == offerId) {
+            // Find new best offer
+            uint256[] storage offers = requestOffers[offer.requestId];
+            uint256 lowestRate = type(uint256).max;
+            uint256 bestId = 0;
+            
+            for (uint i = 0; i < offers.length; i++) {
+                FundingOffer storage checkOffer = fundingOffers[offers[i]];
+                if (checkOffer.status == OfferStatus.Active && checkOffer.interestRate < lowestRate) {
+                    lowestRate = checkOffer.interestRate;
+                    bestId = checkOffer.id;
+                }
+            }
+            
+            request.bestOfferId = bestId;
+        }
+        
+        emit FundingOfferCancelled(offerId);
+    }
+    
+    /**
+     * @dev Accept a funding offer and create a loan
+     */
+    function acceptFundingOffer(uint256 offerId) public offerExists(offerId) {
+        FundingOffer storage offer = fundingOffers[offerId];
+        LoanRequest storage request = loanRequests[offer.requestId];
+        
+        require(msg.sender == request.borrower, "Only borrower can accept");
+        require(request.status == LoanRequestStatus.Active, "Request not active");
+        require(offer.status == OfferStatus.Active, "Offer not active");
+        
+        // Update statuses
         request.status = LoanRequestStatus.Funded;
+        offer.status = OfferStatus.Accepted;
+        
+        emit FundingOfferAccepted(offerId, offer.requestId);
+        
+        // Cancel all other active offers for this request
+        uint256[] storage offers = requestOffers[offer.requestId];
+        for (uint i = 0; i < offers.length; i++) {
+            if (offers[i] != offerId) {
+                FundingOffer storage otherOffer = fundingOffers[offers[i]];
+                if (otherOffer.status == OfferStatus.Active) {
+                    otherOffer.status = OfferStatus.Cancelled;
+                    emit FundingOfferCancelled(otherOffer.id);
+                }
+            }
+        }
+        
+        // Collect funds from lender to fund the loan
+        // This is implemented separately in fundAcceptedOffer
+    }
+    
+    /**
+     * @dev Fund a loan after the offer has been accepted
+     */
+    function fundAcceptedOffer(uint256 offerId) public payable offerExists(offerId) nonReentrant {
+        FundingOffer storage offer = fundingOffers[offerId];
+        LoanRequest storage request = loanRequests[offer.requestId];
+        
+        require(msg.sender == offer.lender, "Only offer creator can fund");
+        require(offer.status == OfferStatus.Accepted, "Offer not accepted");
+        require(msg.value == request.amount, "Incorrect loan amount");
         
         // Create new loan
         _loanIds.increment();
@@ -249,90 +469,33 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         
         Loan storage loan = loans[loanId];
         loan.id = loanId;
-        loan.requestId = requestId;
+        loan.requestId = offer.requestId;
         loan.borrower = request.borrower;
-        loan.lender = msg.sender;
+        loan.lender = offer.lender;
         loan.amount = request.amount;
-        loan.interestRate = request.interestRate;
+        loan.interestRate = offer.interestRate;
         loan.collateralAmount = request.collateralAmount;
         loan.startTime = block.timestamp;
         loan.endTime = block.timestamp + (request.durationDays * 1 days);
         loan.repaidAmount = 0;
         loan.status = LoanStatus.Active;
         
-        // Update lender reputation
-        UserReputation storage lenderRep = userReputations[msg.sender];
+        // Update reputation data
+        UserReputation storage lenderRep = userReputations[offer.lender];
         lenderRep.totalLoansFunded++;
         
-        // Transfer loan amount to borrower
-        payable(request.borrower).transfer(request.amount);
+        // Calculate platform fee
+        uint256 feeAmount = (request.amount * platformFeePercent) / 10000; // Divide by 10000 to account for precision
+        uint256 borrowerAmount = request.amount - feeAmount;
         
-        emit LoanFunded(loanId, requestId, msg.sender, request.borrower, request.amount);
-    }
-    
-    /**
-     * @dev Repay a loan (partial or full)
-     */
-    function repayLoan(uint256 loanId) public payable loanExists(loanId) {
-        Loan storage loan = loans[loanId];
+        // Add fee to collected fees
+        collectedFees += feeAmount;
         
-        require(msg.sender == loan.borrower, "Only borrower can repay");
-        require(loan.status == LoanStatus.Active, "Loan not active");
+        // Transfer funds to borrower (minus platform fee)
+        payable(request.borrower).transfer(borrowerAmount);
         
-        // Calculate total amount due (principal + interest)
-        uint256 interestAmount = (loan.amount * loan.interestRate * (loan.endTime - loan.startTime)) / (365 days * 10000);
-        uint256 totalDue = loan.amount + interestAmount;
-        uint256 remainingDue = totalDue - loan.repaidAmount;
-        
-        require(msg.value > 0, "Payment amount must be greater than 0");
-        require(msg.value <= remainingDue, "Payment exceeds amount due");
-        
-        // Update repaid amount
-        loan.repaidAmount += msg.value;
-        
-        // Transfer payment to lender
-        payable(loan.lender).transfer(msg.value);
-        
-        emit LoanRepaid(loanId, msg.value);
-        
-        // If loan is fully repaid
-        if (loan.repaidAmount >= totalDue) {
-            loan.status = LoanStatus.Repaid;
-            
-            // Return collateral to borrower
-            payable(loan.borrower).transfer(loan.collateralAmount);
-            
-            // Update borrower reputation positively
-            _updateReputation(loan.borrower, true);
-            UserReputation storage borrowerRep = userReputations[loan.borrower];
-            borrowerRep.loansRepaidOnTime++;
-            
-            emit CollateralReturned(loanId, loan.borrower, loan.collateralAmount);
-        }
-    }
-    
-    /**
-     * @dev Mark a loan as defaulted (can only be called after loan due date)
-     */
-    function markLoanDefaulted(uint256 loanId) public loanExists(loanId) {
-        Loan storage loan = loans[loanId];
-        
-        require(msg.sender == loan.lender, "Only lender can mark default");
-        require(loan.status == LoanStatus.Active, "Loan not active");
-        require(block.timestamp > loan.endTime, "Loan not yet due");
-        
-        loan.status = LoanStatus.Defaulted;
-        
-        // Transfer collateral to lender
-        payable(loan.lender).transfer(loan.collateralAmount);
-        
-        // Update borrower reputation negatively
-        _updateReputation(loan.borrower, false);
-        UserReputation storage borrowerRep = userReputations[loan.borrower];
-        borrowerRep.loansDefaulted++;
-        
-        emit LoanDefaulted(loanId);
-        emit CollateralClaimed(loanId, loan.lender, loan.collateralAmount);
+        emit PlatformFeeCollected(loanId, feeAmount);
+        emit LoanFunded(loanId, offer.requestId, offer.lender, request.borrower, request.amount, offer.interestRate);
     }
     
     // View functions
@@ -471,5 +634,22 @@ contract LendingPlatform is Ownable, ReentrancyGuard {
         }
         
         return result;
+    }
+    
+    /**
+     * @dev Get platform statistics
+     */
+    function getPlatformStats() public view returns (
+        uint256 totalLoanRequests,
+        uint256 totalFundedLoans,
+        uint256 currentPlatformFee,
+        uint256 platformFeesCollected
+    ) {
+        return (
+            _loanRequestIds.current(),
+            _loanIds.current(),
+            platformFeePercent,
+            collectedFees
+        );
     }
 } 

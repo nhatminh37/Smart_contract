@@ -267,7 +267,7 @@ async function loadUserDashboard() {
     }
 }
 
-// Load active loan requests
+// Load active loan requests with improved UI for competitive funding
 async function loadActiveLoanRequests() {
     try {
         const container = document.getElementById('activeLoanRequestsContainer');
@@ -291,6 +291,10 @@ async function loadActiveLoanRequests() {
             // Skip if not active
             if (request.status !== 0) continue;
             
+            // Check if expired
+            const isExpired = await lendingContract.checkLoanRequestExpiry(id);
+            if (isExpired) continue;
+            
             // Calculate collateralization ratio and class
             const collateralRatio = (Number(ethers.utils.formatEther(request.collateralAmount)) / Number(ethers.utils.formatEther(request.amount))) * 100;
             let collateralClass = 'low-collateral';
@@ -303,6 +307,28 @@ async function loadActiveLoanRequests() {
             // Format creation date
             const creationDate = new Date(request.timestamp.toNumber() * 1000).toLocaleDateString();
             
+            // Get current best offer information
+            let bestOfferInfo = "No offers yet";
+            let canCreateOffer = true;
+            
+            if (request.bestOfferId.toNumber() > 0) {
+                const bestOffer = await lendingContract.fundingOffers(request.bestOfferId);
+                if (bestOffer.status === 0) { // Active
+                    const bestRate = bestOffer.interestRate.toNumber() / 100;
+                    bestOfferInfo = `<span class="best-offer">Best Rate: ${bestRate}% APR</span>`;
+                    
+                    // Check if current user is the best offer
+                    if (bestOffer.lender.toLowerCase() === currentAccount.toLowerCase()) {
+                        bestOfferInfo += ' (Your offer)';
+                        canCreateOffer = false;
+                    }
+                }
+            }
+            
+            // Get recommended interest rate based on borrower's reputation
+            const recommendedRate = await lendingContract.getRecommendedInterestRate(request.borrower);
+            const recommendedRateFormatted = recommendedRate.toNumber() / 100;
+            
             // Create card
             const cardHtml = `
                 <div class="loan-request-card" data-id="${id}">
@@ -312,9 +338,10 @@ async function loadActiveLoanRequests() {
                             <p>Requested by: ${request.borrower.substring(0, 6)}...${request.borrower.substring(38)}</p>
                             <p>Created on: ${creationDate}</p>
                             <p>Duration: ${request.durationDays.toString()} days</p>
+                            <p>${bestOfferInfo}</p>
                         </div>
                         <div class="col-md-4 text-right">
-                            <div class="interest-rate">${request.interestRate.toNumber() / 100}% APR</div>
+                            <div class="interest-rate">Max: ${request.maxInterestRate.toNumber() / 100}% APR</div>
                             <p>Amount: ${ethers.utils.formatEther(request.amount)} ETH</p>
                             <span class="collateral-ratio ${collateralClass}">
                                 ${collateralRatio.toFixed(0)}% Collateral
@@ -325,8 +352,18 @@ async function loadActiveLoanRequests() {
                         <div class="col-md-12">
                             <button class="btn-primary view-loan-btn" data-id="${id}">View Details</button>
                             ${request.borrower.toLowerCase() !== currentAccount.toLowerCase() ? 
-                                `<button class="btn-primary fund-loan-btn" data-id="${id}" data-amount="${ethers.utils.formatEther(request.amount)}">Fund This Loan</button>` : 
+                                (canCreateOffer ? 
+                                `<button class="btn-primary make-offer-btn" data-id="${id}" 
+                                  data-max="${request.maxInterestRate.toNumber() / 100}" 
+                                  data-recommended="${recommendedRateFormatted}">
+                                    Make Offer
+                                </button>` : 
+                                `<button class="btn-warning view-offers-btn" data-id="${id}">View My Offer</button>`) : 
                                 `<button class="btn-danger cancel-loan-btn" data-id="${id}">Cancel Request</button>`
+                            }
+                            ${request.borrower.toLowerCase() === currentAccount.toLowerCase() && request.bestOfferId.toNumber() > 0 ? 
+                                `<button class="btn-success view-offers-btn" data-id="${id}">View Offers</button>` : 
+                                ''
                             }
                         </div>
                     </div>
@@ -341,11 +378,16 @@ async function loadActiveLoanRequests() {
             btn.addEventListener('click', () => viewLoanDetails(btn.getAttribute('data-id')));
         });
         
-        document.querySelectorAll('.fund-loan-btn').forEach(btn => {
-            btn.addEventListener('click', () => showFundLoanForm(
+        document.querySelectorAll('.make-offer-btn').forEach(btn => {
+            btn.addEventListener('click', () => showMakeOfferForm(
                 btn.getAttribute('data-id'), 
-                btn.getAttribute('data-amount')
+                btn.getAttribute('data-max'),
+                btn.getAttribute('data-recommended')
             ));
+        });
+        
+        document.querySelectorAll('.view-offers-btn').forEach(btn => {
+            btn.addEventListener('click', () => viewRequestOffers(btn.getAttribute('data-id')));
         });
         
         document.querySelectorAll('.cancel-loan-btn').forEach(btn => {
@@ -517,7 +559,7 @@ async function createLoanRequest() {
     try {
         const loanAmount = ethers.utils.parseEther(document.getElementById('loanAmount').value);
         const loanDuration = document.getElementById('loanDuration').value;
-        const baseInterestRate = Math.floor(parseFloat(document.getElementById('baseInterestRate').value) * 100); // Convert to basis points
+        const maxInterestRate = Math.floor(parseFloat(document.getElementById('maxInterestRate').value) * 100); // Convert to basis points
         const loanPurpose = document.getElementById('loanPurpose').value;
         const collateralAmount = ethers.utils.parseEther(document.getElementById('collateralAmount').value);
         
@@ -527,7 +569,7 @@ async function createLoanRequest() {
         const tx = await lendingContract.createLoanRequest(
             loanAmount,
             loanDuration,
-            baseInterestRate,
+            maxInterestRate,
             loanPurpose,
             { value: collateralAmount }
         );
@@ -611,34 +653,241 @@ async function viewLoanDetails(requestId) {
     }
 }
 
-// Show fund loan form
-function showFundLoanForm(requestId, amount) {
+// Show form for making a funding offer
+function showMakeOfferForm(requestId, maxRate, recommendedRate) {
+    // Create and display offer form modal
     const modal = document.getElementById('loanDetailsModal');
-    const fundForm = document.getElementById('fundLoanForm');
-    const fundAmount = document.getElementById('fundAmount');
+    const content = document.getElementById('loanDetailsContent');
     
-    // Set fund amount
-    fundAmount.textContent = amount;
+    // Create content
+    content.innerHTML = `
+        <div class="offer-form">
+            <h3>Make a Funding Offer</h3>
+            <p>Loan Request ID: ${requestId}</p>
+            <p>Maximum Interest Rate: ${maxRate}%</p>
+            <p>Recommended Rate: ${recommendedRate}% (based on borrower's reputation)</p>
+            <div class="input-group">
+                <label for="offerInterestRate">Your Offered Interest Rate (% per year)</label>
+                <input type="number" id="offerInterestRate" step="0.1" min="1" max="${maxRate}" value="${Math.min(recommendedRate, maxRate)}">
+                <p class="form-text">Lower rates are more likely to be accepted by the borrower.</p>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button id="submitOfferBtn" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Submit Offer
+                </button>
+                <button type="button" class="btn btn-secondary close-modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
     
-    // Show fund form
-    fundForm.style.display = 'block';
-    
-    // Set confirm button action
-    document.getElementById('confirmFundBtn').onclick = () => fundLoan(requestId, amount);
+    // Set submit button action
+    document.getElementById('submitOfferBtn').onclick = async () => {
+        const interestRate = parseFloat(document.getElementById('offerInterestRate').value);
+        await createFundingOffer(requestId, interestRate);
+        modal.style.display = 'none';
+    };
     
     // Show modal
     modal.style.display = 'block';
 }
 
-// Fund a loan
-async function fundLoan(requestId, amount) {
+// Create a funding offer
+async function createFundingOffer(requestId, interestRate) {
+    try {
+        document.getElementById('loadingSpinner').style.display = 'block';
+        
+        const interestRateBasis = Math.floor(interestRate * 100); // Convert to basis points
+        
+        const tx = await lendingContract.createFundingOffer(requestId, interestRateBasis);
+        await tx.wait();
+        
+        // Reload loan requests
+        await loadActiveLoanRequests();
+        
+        document.getElementById('loadingSpinner').style.display = 'none';
+        alert('Funding offer created successfully!');
+    } catch (error) {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        console.error('Error creating funding offer:', error);
+        alert('Failed to create offer. ' + error.message);
+    }
+}
+
+// View all offers for a request
+async function viewRequestOffers(requestId) {
+    try {
+        const modal = document.getElementById('loanDetailsModal');
+        const content = document.getElementById('loanDetailsContent');
+        
+        document.getElementById('loadingSpinner').style.display = 'block';
+        
+        // Get request details
+        const request = await lendingContract.loanRequests(requestId);
+        
+        // Get all offers for this request
+        const offerIds = await lendingContract.getRequestOffers(requestId);
+        
+        let offersHtml = '';
+        let isBorrower = request.borrower.toLowerCase() === currentAccount.toLowerCase();
+        
+        if (offerIds.length === 0) {
+            offersHtml = '<p>No offers found for this loan request.</p>';
+        } else {
+            offersHtml = `
+                <table class="offers-table">
+                    <thead>
+                        <tr>
+                            <th>Lender</th>
+                            <th>Interest Rate</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            for (const id of offerIds) {
+                const offer = await lendingContract.fundingOffers(id);
+                
+                // Skip inactive offers unless user is borrower or the offer creator
+                if (offer.status !== 0 && !isBorrower && offer.lender.toLowerCase() !== currentAccount.toLowerCase()) {
+                    continue;
+                }
+                
+                const offerDate = new Date(offer.timestamp.toNumber() * 1000).toLocaleDateString();
+                const rate = offer.interestRate.toNumber() / 100;
+                
+                let statusText = '';
+                let action = '';
+                
+                switch (offer.status) {
+                    case 0: // Active
+                        statusText = '<span class="status-active">Active</span>';
+                        if (isBorrower) {
+                            action = `<button class="btn-success accept-offer-btn" data-id="${offer.id}">Accept</button>`;
+                        } else if (offer.lender.toLowerCase() === currentAccount.toLowerCase()) {
+                            action = `<button class="btn-danger cancel-offer-btn" data-id="${offer.id}">Cancel</button>`;
+                        }
+                        break;
+                    case 1: // Accepted
+                        statusText = '<span class="status-accepted">Accepted</span>';
+                        if (offer.lender.toLowerCase() === currentAccount.toLowerCase()) {
+                            action = `<button class="btn-primary fund-accepted-btn" data-id="${offer.id}" data-amount="${ethers.utils.formatEther(request.amount)}">Fund</button>`;
+                        }
+                        break;
+                    case 2: // Cancelled
+                        statusText = '<span class="status-cancelled">Cancelled</span>';
+                        break;
+                    case 3: // Expired
+                        statusText = '<span class="status-expired">Expired</span>';
+                        break;
+                }
+                
+                offersHtml += `
+                    <tr>
+                        <td>${offer.lender.substring(0, 6)}...${offer.lender.substring(38)}</td>
+                        <td>${rate}%</td>
+                        <td>${offerDate}</td>
+                        <td>${statusText}</td>
+                        <td>${action}</td>
+                    </tr>
+                `;
+            }
+            
+            offersHtml += '</tbody></table>';
+        }
+        
+        // Create content
+        content.innerHTML = `
+            <div class="offers-section">
+                <h3>Offers for Loan Request #${requestId}</h3>
+                <div class="offers-list">
+                    ${offersHtml}
+                </div>
+            </div>
+        `;
+        
+        // Add event listeners
+        document.querySelectorAll('.accept-offer-btn').forEach(btn => {
+            btn.addEventListener('click', () => acceptFundingOffer(btn.getAttribute('data-id')));
+        });
+        
+        document.querySelectorAll('.cancel-offer-btn').forEach(btn => {
+            btn.addEventListener('click', () => cancelFundingOffer(btn.getAttribute('data-id')));
+        });
+        
+        document.querySelectorAll('.fund-accepted-btn').forEach(btn => {
+            btn.addEventListener('click', () => fundAcceptedOffer(
+                btn.getAttribute('data-id'),
+                btn.getAttribute('data-amount')
+            ));
+        });
+        
+        document.getElementById('loadingSpinner').style.display = 'none';
+        
+        // Show modal
+        modal.style.display = 'block';
+    } catch (error) {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        console.error('Error viewing offers:', error);
+        alert('Failed to load offers. ' + error.message);
+    }
+}
+
+// Accept a funding offer
+async function acceptFundingOffer(offerId) {
+    try {
+        document.getElementById('loadingSpinner').style.display = 'block';
+        document.getElementById('loanDetailsModal').style.display = 'none';
+        
+        const tx = await lendingContract.acceptFundingOffer(offerId);
+        await tx.wait();
+        
+        // Reload data
+        await loadActiveLoanRequests();
+        
+        document.getElementById('loadingSpinner').style.display = 'none';
+        alert('Offer accepted successfully! The lender will now fund the loan.');
+    } catch (error) {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        console.error('Error accepting offer:', error);
+        alert('Failed to accept offer. ' + error.message);
+    }
+}
+
+// Cancel a funding offer
+async function cancelFundingOffer(offerId) {
+    try {
+        document.getElementById('loadingSpinner').style.display = 'block';
+        document.getElementById('loanDetailsModal').style.display = 'none';
+        
+        const tx = await lendingContract.cancelFundingOffer(offerId);
+        await tx.wait();
+        
+        // Reload data
+        await loadActiveLoanRequests();
+        
+        document.getElementById('loadingSpinner').style.display = 'none';
+        alert('Offer cancelled successfully!');
+    } catch (error) {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        console.error('Error cancelling offer:', error);
+        alert('Failed to cancel offer. ' + error.message);
+    }
+}
+
+// Fund an accepted offer
+async function fundAcceptedOffer(offerId, amount) {
     try {
         document.getElementById('loadingSpinner').style.display = 'block';
         document.getElementById('loanDetailsModal').style.display = 'none';
         
         const amountInWei = ethers.utils.parseEther(amount);
         
-        const tx = await lendingContract.fundLoan(requestId, { value: amountInWei });
+        const tx = await lendingContract.fundAcceptedOffer(offerId, { value: amountInWei });
         await tx.wait();
         
         // Reload data
@@ -654,7 +903,7 @@ async function fundLoan(requestId, amount) {
     } catch (error) {
         document.getElementById('loadingSpinner').style.display = 'none';
         console.error('Error funding loan:', error);
-        alert('Failed to fund loan. Please try again.');
+        alert('Failed to fund loan. ' + error.message);
     }
 }
 

@@ -1,4 +1,4 @@
-const lendingPlatformAddress = "0x025c8a1486757f2304f404d702d3786e93b4e306"; // Will be replaced after deployment
+const lendingPlatformAddress = "0xd9ae2b75e0c0f72410ffdaa1a33d069463f79c61"; // Will be replaced after deployment
 
 const lendingPlatformABI = [
   {

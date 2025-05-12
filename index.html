@@ -678,9 +678,9 @@
                             <input type="number" id="loanDuration" min="1" required>
                         </div>
                         <div class="input-group">
-                            <label for="baseInterestRate">Base Interest Rate (% per year)</label>
-                            <input type="number" id="baseInterestRate" step="0.1" min="1" required>
-                            <p class="form-text">Note: Actual interest rate may be adjusted based on your reputation score.</p>
+                            <label for="maxInterestRate">Maximum Interest Rate (% per year)</label>
+                            <input type="number" id="maxInterestRate" step="0.1" min="1" required>
+                            <p class="form-text">Lenders will compete to offer you the best rate within your maximum limit.</p>
                         </div>
                         <div class="input-group">
                             <label for="loanPurpose">Loan Purpose</label>
@@ -689,7 +689,7 @@
                         <div class="input-group">
                             <label for="collateralAmount">Collateral Amount (ETH)</label>
                             <input type="number" id="collateralAmount" step="0.01" min="0.01" required>
-                            <p class="form-text">Higher collateral improves your chances of getting funded and affects your reputation.</p>
+                            <p class="form-text">Higher collateral improves your chances of getting good offers and affects your reputation.</p>
                         </div>
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">
