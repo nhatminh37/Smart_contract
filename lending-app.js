@@ -423,6 +423,17 @@ async function loadActiveLoanRequests() {
         
         requestsContainer.innerHTML = '';
         
+        // Get the token symbol if we're in token mode
+        let tokenSymbol = 'ETH';
+        if (usingTokenMode) {
+            try {
+                tokenSymbol = await loanToken.symbol();
+            } catch (error) {
+                console.error("Error getting token symbol:", error);
+                tokenSymbol = 'P2PLT'; // Default token symbol if we can't get it
+            }
+        }
+        
         for (const id of requestIds) {
             const request = await lendingPlatform.loanRequests(id);
             
@@ -431,7 +442,7 @@ async function loadActiveLoanRequests() {
             requestElement.className = 'loan-request';
             requestElement.innerHTML = `
                 <h3>Loan Request #${request.id}</h3>
-                <p>Amount: ${ethers.utils.formatEther(request.amount)} ETH</p>
+                <p>Amount: ${ethers.utils.formatEther(request.amount)} ${tokenSymbol}</p>
                 <p>Duration: ${request.durationDays} days</p>
                 <p>Max Interest: ${request.maxInterestRate / 100}%</p>
                 <p>Collateral: ${ethers.utils.formatEther(request.collateralAmount)} ETH</p>
@@ -515,6 +526,17 @@ async function loadUserLoans() {
         
         loansContainer.innerHTML = '<p>Loading your loans...</p>';
         
+        // Get the token symbol if we're in token mode
+        let tokenSymbol = 'ETH';
+        if (usingTokenMode) {
+            try {
+                tokenSymbol = await loanToken.symbol();
+            } catch (error) {
+                console.error("Error getting token symbol:", error);
+                tokenSymbol = 'P2PLT'; // Default token symbol if we can't get it
+            }
+        }
+        
         try {
             // Check if user has any loans by inspecting contract events instead of calling the function
             // This avoids the revert error
@@ -541,7 +563,7 @@ async function loadUserLoans() {
                     loanElement.className = 'loan-item';
                     loanElement.innerHTML = `
                         <h3>Loan #${loanId}</h3>
-                        <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                        <p>Amount: ${ethers.utils.formatEther(loan.amount)} ${tokenSymbol}</p>
                         <p>Interest Rate: ${loan.interestRate / 100}%</p>
                         <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
                         <p>Status: ${getLoanStatusText(loan.status)}</p>
@@ -617,7 +639,21 @@ async function repayLoan() {
         
         document.getElementById('status').textContent = "Repaying loan...";
         
-        const tx = await lendingPlatform.repayLoan(loanId, { value: totalRepayment });
+        let tx;
+        if (usingTokenMode) {
+            // First approve the LendingPlatform contract to spend tokens
+            document.getElementById('status').textContent = "Approving token transfer...";
+            const approveTx = await loanToken.approve(LENDING_PLATFORM_ADDRESS, totalRepayment);
+            await approveTx.wait();
+            
+            // Then repay the loan
+            document.getElementById('status').textContent = "Repaying loan...";
+            tx = await lendingPlatform.repayLoan(loanId);
+        } else {
+            // If not using token mode, repay with ETH
+            tx = await lendingPlatform.repayLoan(loanId, { value: totalRepayment });
+        }
+        
         await tx.wait();
         
         const repayDialog = document.getElementById('repayDialog');
@@ -647,6 +683,17 @@ async function loadUserInvestments() {
         
         investmentsContainer.innerHTML = '<p>Loading your investments...</p>';
         
+        // Get the token symbol if we're in token mode
+        let tokenSymbol = 'ETH';
+        if (usingTokenMode) {
+            try {
+                tokenSymbol = await loanToken.symbol();
+            } catch (error) {
+                console.error("Error getting token symbol:", error);
+                tokenSymbol = 'P2PLT'; // Default token symbol if we can't get it
+            }
+        }
+        
         try {
             // Check if user has any investments by inspecting contract events instead of calling the function
             // This avoids the revert error
@@ -673,7 +720,7 @@ async function loadUserInvestments() {
                     investmentElement.className = 'investment-item';
                     investmentElement.innerHTML = `
                         <h3>Investment in Loan #${loanId}</h3>
-                        <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                        <p>Amount: ${ethers.utils.formatEther(loan.amount)} ${tokenSymbol}</p>
                         <p>Interest Rate: ${loan.interestRate / 100}%</p>
                         <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
                         <p>Status: ${getLoanStatusText(loan.status)}</p>
@@ -785,15 +832,80 @@ async function updatePlatformSettings() {
     }
 }
 
-// Update token mode - minimal implementation
+// Update token mode - implementation for admin use
 async function updateTokenMode() {
     try {
+        const usingTokenModeCheckbox = document.getElementById('usingTokenMode');
+        const tokenAddressInput = document.getElementById('tokenAddress');
+        
+        if (!usingTokenModeCheckbox || !tokenAddressInput) {
+            console.error("Token mode form fields not found");
+            return;
+        }
+        
+        const enableTokenMode = usingTokenModeCheckbox.checked;
+        const tokenAddress = tokenAddressInput.value.trim();
+        
         document.getElementById('status').textContent = "Updating token mode...";
-        // Implementation would go here
-        document.getElementById('status').textContent = "Token mode updated";
+        
+        let tx;
+        if (enableTokenMode) {
+            if (!tokenAddress || !ethers.utils.isAddress(tokenAddress)) {
+                document.getElementById('status').textContent = "Please enter a valid token address";
+                return;
+            }
+            
+            tx = await lendingPlatform.enableTokenMode(tokenAddress);
+        } else {
+            tx = await lendingPlatform.disableTokenMode();
+        }
+        
+        await tx.wait();
+        
+        // Update the UI with the new token mode setting
+        usingTokenMode = enableTokenMode;
+        updateCurrencyLabels();
+        
+        // If token mode was enabled, reload the token instance
+        if (enableTokenMode) {
+            loanToken = new ethers.Contract(
+                tokenAddress,
+                LOAN_TOKEN_ABI,
+                signer
+            );
+            
+            // Display token balance
+            try {
+                const tokenBalance = await loanToken.balanceOf(userAddress);
+                const tokenSymbol = await loanToken.symbol();
+                
+                if (document.getElementById('tokenBalance')) {
+                    document.getElementById('tokenBalance').textContent = `${ethers.utils.formatEther(tokenBalance)} ${tokenSymbol}`;
+                    document.getElementById('tokenInfo').style.display = 'block';
+                } else {
+                    const walletInfo = document.getElementById('walletInfo');
+                    if (walletInfo) {
+                        const tokenInfo = document.createElement('p');
+                        tokenInfo.id = 'tokenInfo';
+                        tokenInfo.innerHTML = `Token Balance: <span id="tokenBalance">${ethers.utils.formatEther(tokenBalance)} ${tokenSymbol}</span>`;
+                        walletInfo.appendChild(tokenInfo);
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading token balance:", error);
+            }
+        } else {
+            // Hide token balance if token mode is disabled
+            const tokenInfo = document.getElementById('tokenInfo');
+            if (tokenInfo) {
+                tokenInfo.style.display = 'none';
+            }
+        }
+        
+        document.getElementById('status').textContent = `Token mode ${enableTokenMode ? 'enabled' : 'disabled'} successfully`;
     } catch (error) {
         console.error("Error updating token mode:", error);
-        document.getElementById('status').textContent = `Error: ${error.message}`;
+        document.getElementById('status').textContent = `Error updating token mode: ${error.message}`;
     }
 }
 
