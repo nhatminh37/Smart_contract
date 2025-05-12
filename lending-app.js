@@ -411,41 +411,46 @@ async function loadUserLoans() {
         
         loansContainer.innerHTML = '<p>Loading your loans...</p>';
         
-        const loanIds = await lendingPlatform.getUserActiveLoans(userAddress);
-        
-        if (loanIds.length === 0) {
-            loansContainer.innerHTML = '<p>You have no active loans.</p>';
-            return;
-        }
-        
-        loansContainer.innerHTML = '';
-        
-        for (const id of loanIds) {
-            const loan = await lendingPlatform.loans(id);
+        try {
+            const loanIds = await lendingPlatform.getUserActiveLoans(userAddress);
             
-            // Create loan element
-            const loanElement = document.createElement('div');
-            loanElement.className = 'loan-item';
-            loanElement.innerHTML = `
-                <h3>Loan #${loan.id}</h3>
-                <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
-                <p>Interest Rate: ${loan.interestRate / 100}%</p>
-                <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
-                <p>Status: ${getLoanStatusText(loan.status)}</p>
-                <button class="repay-button btn btn-primary" data-id="${loan.id}">Repay Loan</button>
-            `;
+            if (!loanIds || loanIds.length === 0) {
+                loansContainer.innerHTML = '<p>You have no active loans.</p>';
+                return;
+            }
             
-            loansContainer.appendChild(loanElement);
-        }
-        
-        // Add event listeners to repay buttons
-        const repayButtons = document.querySelectorAll('.repay-button');
-        repayButtons.forEach(button => {
-            button.addEventListener('click', (event) => {
-                const loanId = event.target.getAttribute('data-id');
-                showRepayDialog(loanId);
+            loansContainer.innerHTML = '';
+            
+            for (const id of loanIds) {
+                const loan = await lendingPlatform.loans(id);
+                
+                // Create loan element
+                const loanElement = document.createElement('div');
+                loanElement.className = 'loan-item';
+                loanElement.innerHTML = `
+                    <h3>Loan #${loan.id}</h3>
+                    <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                    <p>Interest Rate: ${loan.interestRate / 100}%</p>
+                    <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
+                    <p>Status: ${getLoanStatusText(loan.status)}</p>
+                    <button class="repay-button btn btn-primary" data-id="${loan.id}">Repay Loan</button>
+                `;
+                
+                loansContainer.appendChild(loanElement);
+            }
+            
+            // Add event listeners to repay buttons
+            const repayButtons = document.querySelectorAll('.repay-button');
+            repayButtons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const loanId = event.target.getAttribute('data-id');
+                    showRepayDialog(loanId);
+                });
             });
-        });
+        } catch (error) {
+            console.log("No loans found or contract error:", error);
+            loansContainer.innerHTML = '<p>You have no active loans.</p>';
+        }
     } catch (error) {
         console.error("Error loading user loans:", error);
         const loansContainer = document.getElementById('userLoans');
@@ -522,30 +527,35 @@ async function loadUserInvestments() {
         
         investmentsContainer.innerHTML = '<p>Loading your investments...</p>';
         
-        const loanIds = await lendingPlatform.getUserActiveInvestments(userAddress);
-        
-        if (loanIds.length === 0) {
+        try {
+            const loanIds = await lendingPlatform.getUserActiveInvestments(userAddress);
+            
+            if (!loanIds || loanIds.length === 0) {
+                investmentsContainer.innerHTML = '<p>You have no active investments.</p>';
+                return;
+            }
+            
+            investmentsContainer.innerHTML = '';
+            
+            for (const id of loanIds) {
+                const loan = await lendingPlatform.loans(id);
+                
+                // Create investment element
+                const investmentElement = document.createElement('div');
+                investmentElement.className = 'investment-item';
+                investmentElement.innerHTML = `
+                    <h3>Investment in Loan #${loan.id}</h3>
+                    <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
+                    <p>Interest Rate: ${loan.interestRate / 100}%</p>
+                    <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
+                    <p>Status: ${getLoanStatusText(loan.status)}</p>
+                `;
+                
+                investmentsContainer.appendChild(investmentElement);
+            }
+        } catch (error) {
+            console.log("No investments found or contract error:", error);
             investmentsContainer.innerHTML = '<p>You have no active investments.</p>';
-            return;
-        }
-        
-        investmentsContainer.innerHTML = '';
-        
-        for (const id of loanIds) {
-            const loan = await lendingPlatform.loans(id);
-            
-            // Create investment element
-            const investmentElement = document.createElement('div');
-            investmentElement.className = 'investment-item';
-            investmentElement.innerHTML = `
-                <h3>Investment in Loan #${loan.id}</h3>
-                <p>Amount: ${ethers.utils.formatEther(loan.amount)} ETH</p>
-                <p>Interest Rate: ${loan.interestRate / 100}%</p>
-                <p>End Date: ${new Date(loan.endTime * 1000).toLocaleDateString()}</p>
-                <p>Status: ${getLoanStatusText(loan.status)}</p>
-            `;
-            
-            investmentsContainer.appendChild(investmentElement);
         }
     } catch (error) {
         console.error("Error loading user investments:", error);
